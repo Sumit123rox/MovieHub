@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MovieHub</string>
+    <string name="watch_now">Watch Now</string>
+    <string name="featured">Featured</string>
+    <string name="trending_movies">Trending Movies</string>
+    <string name="popular_movies">Popular Movies</string>
+    <string name="trending_shows">Trending Shows</string>
+    <string name="popular_shows">Popular Shows</string>
+    <string name="see_all">See All</string>
+    <string name="power_up_hub">Power Up Your Hub</string>
+    <string name="sync_trakt_debrid">Sync with Trakt &amp; Real-Debrid</string>
+    <string name="library_across_devices">Get your library across all devices.</string>
+    <string name="no_movies_found">No movies found</string>
+    <string name="no_items_found">No items found in this category.</string>
+    <string name="streams">Streams</string>
+    <string name="no_streams_found">No streams found for this item.</string>
+    <string name="search_hint">Type to start searching</string>
+    <string name="install_addon">Install Addon</string>
+    <string name="addon_url_hint">Stremio Addon URL (https://...)</string>
+    <string name="install">Install</string>
+    <string name="installed_addons">Installed Addons</string>
+    <string name="no_addons_installed">No addons installed yet.</string>
+    <string name="back">Back</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="unknown_source">Unknown Source</string>
+</resources>

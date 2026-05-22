@@ -1,0 +1,14 @@
+CREATE TABLE AddonEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    url TEXT NOT NULL,
+    manifest TEXT NOT NULL
+);
+
+insertAddon:
+INSERT OR REPLACE INTO AddonEntity(id, url, manifest) VALUES (?, ?, ?);
+
+getAllAddons:
+SELECT * FROM AddonEntity;
+
+deleteAddon:
+DELETE FROM AddonEntity WHERE id = ?;
