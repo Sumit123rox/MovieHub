@@ -11,10 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 class HomeViewModel(
     private val repository: HomeRepository,
@@ -25,13 +25,21 @@ class HomeViewModel(
 
     private val _event = MutableSharedFlow<HomeEvent>()
     val event: SharedFlow<HomeEvent> = _event.asSharedFlow()
-
-    private val sectionsMutex = Mutex()
-
     init {
         viewModelScope.launch {
+            var lastLoadedAddons: List<com.moviehub.core.model.StremioManifest>? = null
             addonManager.installedAddons.collectLatest { addons ->
                 _state.value = _state.value.copy(installedAddons = addons)
+                
+                val isSame = lastLoadedAddons != null &&
+                        lastLoadedAddons!!.size == addons.size &&
+                        lastLoadedAddons!!.zip(addons).all { (a, b) -> a.id == b.id && a.version == b.version }
+                
+                if (isSame && _state.value.dynamicSections.isNotEmpty()) {
+                    return@collectLatest
+                }
+                
+                lastLoadedAddons = addons
                 
                 if (addons.isNotEmpty()) {
                     loadDynamicCatalogs(addons)
@@ -63,61 +71,94 @@ class HomeViewModel(
         }
     }
 
-    private suspend fun loadDynamicCatalogs(addons: List<com.moviehub.core.model.StremioManifest>) = coroutineScope {
+    private suspend fun loadDynamicCatalogs(addons: List<com.moviehub.core.model.StremioManifest>) {
         _state.value = _state.value.copy(isLoading = true, dynamicSections = emptyList(), featuredItems = emptyList())
         
-        val activeSections = mutableListOf<CatalogSection>()
-        var featuredItemsCaptured = false
-        
-        addons.forEach { manifest ->
-            manifest.catalogs.forEach { catalog ->
-                launch {
-                    try {
-                        val items = repository.getCatalog(
-                            type = catalog.type,
-                            catalogId = catalog.id,
-                            addonId = manifest.id
-                        ).take(20)
-                        
-                        if (items.isNotEmpty()) {
-                            sectionsMutex.withLock {
-                                // 1. Capture Featured Items ONLY ONCE for the Hero
-                                if (!featuredItemsCaptured && items.size >= 5) {
-                                    _state.value = _state.value.copy(featuredItems = items.take(5))
-                                    featuredItemsCaptured = true
-                                }
-
-                                // 2. Add to Dynamic Sections, potentially filtering out hero items if they overlap
-                                val section = CatalogSection(
-                                    addonId = manifest.id,
-                                    addonName = manifest.name,
-                                    catalogId = catalog.id,
-                                    catalogName = catalog.name ?: catalog.id.replaceFirstChar { it.uppercase() },
+        try {
+            val allSections = supervisorScope {
+                addons.flatMap { manifest ->
+                    manifest.catalogs.map { catalog ->
+                        async {
+                            try {
+                                val items = repository.getCatalog(
                                     type = catalog.type,
-                                    items = if (featuredItemsCaptured && _state.value.featuredItems.any { h -> items.any { i -> i.id == h.id } }) {
-                                        // If this section contains hero items, we skip the first few or just show it as is
-                                        // User said "showing same data on two places is not good", let's filter
-                                        items.filter { item -> _state.value.featuredItems.none { it.id == item.id } }
-                                    } else items
-                                )
+                                    catalogId = catalog.id,
+                                    addonId = manifest.id
+                                ).take(20) // Fetch up to 20 to have enough after merging/filtering
                                 
-                                if (section.items.isNotEmpty()) {
-                                    activeSections.add(section)
-                                    // Sort by addon name and then catalog name for a stable premium look
-                                    _state.value = _state.value.copy(
-                                        dynamicSections = activeSections.toList().sortedWith(
-                                            compareBy({ it.addonName }, { it.catalogName })
-                                        ),
-                                        isLoading = false
+                                if (items.isNotEmpty()) {
+                                    CatalogSection(
+                                        addonId = manifest.id,
+                                        addonName = manifest.name,
+                                        catalogId = catalog.id,
+                                        catalogName = catalog.name ?: catalog.id.replaceFirstChar { it.uppercase() },
+                                        type = catalog.type,
+                                        items = items
                                     )
-                                }
+                                } else null
+                            } catch (e: Exception) {
+                                null
                             }
                         }
-                    } catch (e: Exception) {
-                        // Log catalog failure but don't crash
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            
+            // 1. Capture Featured Items ONLY ONCE for the Hero
+            val featuredSection = allSections.find { it.items.size >= 5 } ?: allSections.firstOrNull()
+            val featured = featuredSection?.items?.take(5) ?: emptyList()
+            val featuredIds = featured.map { it.id }.toSet()
+            
+            // 2. Group and consolidate sections by catalogName (case-insensitive) and type
+            val groupedSections = allSections.groupBy { "${it.catalogName.trim().lowercase()}_${it.type}" }
+            
+            val consolidatedSections = groupedSections.map { (groupKey, sections) ->
+                val firstSection = sections.first()
+                val catalogName = firstSection.catalogName
+                val type = firstSection.type
+                
+                // Combine all items from all sections in this group, then deduplicate by id
+                val combinedItems = sections.flatMap { it.items }
+                val deduplicatedItems = mutableListOf<com.moviehub.core.model.MediaItem>()
+                val seenIds = mutableSetOf<String>()
+                
+                combinedItems.forEach { item ->
+                    if (item.id !in seenIds && item.id !in featuredIds) {
+                        seenIds.add(item.id)
+                        deduplicatedItems.add(item)
                     }
                 }
-            }
+                
+                val uniqueAddons = sections.map { it.addonName }.distinct()
+                val addonName = if (uniqueAddons.size == 1) uniqueAddons.first() else "Multiple Providers"
+                val addonId = if (uniqueAddons.size == 1) firstSection.addonId else "multi_addons"
+                val catalogId = if (uniqueAddons.size == 1) firstSection.catalogId else "merged_${firstSection.catalogId}"
+                
+                CatalogSection(
+                    addonId = addonId,
+                    addonName = addonName,
+                    catalogId = catalogId,
+                    catalogName = catalogName,
+                    type = type,
+                    items = deduplicatedItems
+                )
+            }.filter { it.items.isNotEmpty() }
+            
+            // Sort consolidated sections by type and then catalogName for premium layout
+            val finalSections = consolidatedSections.sortedWith(
+                compareBy({ it.type }, { it.catalogName })
+            )
+            
+            _state.value = _state.value.copy(
+                featuredItems = featured,
+                dynamicSections = finalSections,
+                isLoading = false
+            )
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(
+                isLoading = false,
+                error = e.message ?: "Failed to load catalogs"
+            )
         }
     }
 }

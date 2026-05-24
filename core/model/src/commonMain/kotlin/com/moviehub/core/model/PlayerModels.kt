@@ -25,6 +25,7 @@ data class SubtitleTrack(
 data class PlayerPlaybackState(
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
+    val error: String? = null,
     val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val bufferedPositionMs: Long = 0L,

@@ -77,6 +77,20 @@ class StremioApiClient(
         }
     }
 
+    private fun String.encodeAddonPathSegment(): String = buildString {
+        this@encodeAddonPathSegment.encodeToByteArray().forEach { byte ->
+            val value = byte.toInt() and 0xFF
+            val char = value.toChar()
+            if (char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '-' || char == '_' || char == '.' || char == '~' || char == ':') {
+                append(char)
+            } else {
+                append('%')
+                append("0123456789ABCDEF"[value shr 4])
+                append("0123456789ABCDEF"[value and 0x0F])
+            }
+        }
+    }
+
     suspend fun getCatalog(
         baseUrl: String,
         type: String,
@@ -84,8 +98,9 @@ class StremioApiClient(
         extra: Map<String, String> = emptyMap()
     ): CatalogResponse? {
         val sanitizedBase = sanitizeBaseUrl(baseUrl)
-        val extraPath = if (extra.isEmpty()) "" else "/${extra.map { "${it.key}=${it.value}" }.joinToString(",")}"
-        val url = "$sanitizedBase/catalog/$type/$id$extraPath.json"
+        val encodedId = id.encodeAddonPathSegment()
+        val extraPath = if (extra.isEmpty()) "" else "/${extra.map { "${it.key.encodeAddonPathSegment()}=${it.value.encodeAddonPathSegment()}" }.joinToString("&")}"
+        val url = "$sanitizedBase/catalog/$type/$encodedId$extraPath.json"
         logger.i { "Fetching catalog: $url" }
         return try {
             val response = httpClient.get(url)
@@ -105,7 +120,8 @@ class StremioApiClient(
         id: String
     ): MetaResponse? {
         val sanitizedBase = sanitizeBaseUrl(baseUrl)
-        val url = "$sanitizedBase/meta/$type/$id.json"
+        val encodedId = id.encodeAddonPathSegment()
+        val url = "$sanitizedBase/meta/$type/$encodedId.json"
         logger.i { "Fetching meta: $url" }
         return try {
             val response = httpClient.get(url)
@@ -127,7 +143,8 @@ class StremioApiClient(
         addonId: String = ""
     ): List<StreamItem> {
         val sanitizedBase = sanitizeBaseUrl(baseUrl)
-        val url = "$sanitizedBase/stream/$type/$id.json"
+        val encodedId = id.encodeAddonPathSegment()
+        val url = "$sanitizedBase/stream/$type/$encodedId.json"
         logger.i { "Fetching streams: $url" }
         return try {
             val response = httpClient.get(url)

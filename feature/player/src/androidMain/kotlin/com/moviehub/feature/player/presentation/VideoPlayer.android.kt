@@ -37,6 +37,43 @@ actual fun VideoPlayer(
     modifier: Modifier
 ) {
     val context = LocalContext.current
+    DisposableEffect(context) {
+        var currentContext = context
+        var activity: android.app.Activity? = null
+        while (currentContext is android.content.ContextWrapper) {
+            if (currentContext is android.app.Activity) {
+                activity = currentContext
+                break
+            }
+            currentContext = currentContext.baseContext
+        }
+        if (currentContext is android.app.Activity) {
+            activity = currentContext
+        }
+        val originalOrientation = activity?.requestedOrientation ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+
+        // Immersive Fullscreen Mode
+        val window = activity?.window
+        var previousBehavior = 0
+        var controller: androidx.core.view.WindowInsetsControllerCompat? = null
+        if (window != null) {
+            controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            previousBehavior = controller.systemBarsBehavior
+            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        onDispose {
+            activity?.requestedOrientation = originalOrientation
+            if (window != null && controller != null) {
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                controller.systemBarsBehavior = previousBehavior
+            }
+        }
+    }
+
     val exoPlayer = remember {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setDefaultRequestProperties(headers)
@@ -53,11 +90,36 @@ actual fun VideoPlayer(
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
-            .build().apply {
-                setMediaItem(MediaItem.fromUri(url))
-                prepare()
-                playWhenReady = true
-            }
+            .build()
+    }
+
+    // Safely load and prepare stream media inside a LaunchedEffect to prevent crashes
+    LaunchedEffect(exoPlayer, url) {
+        if (url.isBlank()) {
+            onPlaybackStateChanged(
+                PlayerPlaybackState(
+                    isPlaying = false,
+                    isLoading = false,
+                    error = "Failed to load stream: Stream URL is blank"
+                )
+            )
+            return@LaunchedEffect
+        }
+        
+        try {
+            val mediaItem = MediaItem.fromUri(url)
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+        } catch (e: Exception) {
+            onPlaybackStateChanged(
+                PlayerPlaybackState(
+                    isPlaying = false,
+                    isLoading = false,
+                    error = "Failed to load stream: ${e.localizedMessage ?: e.message ?: "Invalid Stream URL"}"
+                )
+            )
+        }
     }
 
     // Efficient state updates using Listener instead of polling
@@ -87,6 +149,7 @@ actual fun VideoPlayer(
                     PlayerPlaybackState(
                         isPlaying = player.isPlaying,
                         isLoading = player.isLoading,
+                        error = player.playerError?.message ?: player.playerError?.localizedMessage,
                         currentPositionMs = player.currentPosition,
                         durationMs = player.duration.coerceAtLeast(0L),
                         bufferedPositionMs = player.bufferedPosition,
@@ -111,6 +174,7 @@ actual fun VideoPlayer(
                     PlayerPlaybackState(
                         isPlaying = exoPlayer.isPlaying,
                         isLoading = exoPlayer.isLoading,
+                        error = exoPlayer.playerError?.message,
                         currentPositionMs = exoPlayer.currentPosition,
                         durationMs = exoPlayer.duration.coerceAtLeast(0L),
                         bufferedPositionMs = exoPlayer.bufferedPosition,
@@ -155,18 +219,28 @@ actual fun VideoPlayer(
                     exoPlayer.playbackParameters = PlaybackParameters(action.speed)
                 }
                 is PlayerAction.SelectAudioTrack -> {
-                    val trackGroup = exoPlayer.currentTracks.groups[action.index]
-                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                        .buildUpon()
-                        .setOverrideForType(TrackSelectionOverride(trackGroup.mediaTrackGroup, 0))
-                        .build()
+                    if (action.index in 0 until exoPlayer.currentTracks.groups.size) {
+                        val trackGroup = exoPlayer.currentTracks.groups[action.index]
+                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                            .buildUpon()
+                            .setOverrideForType(TrackSelectionOverride(trackGroup.mediaTrackGroup, 0))
+                            .build()
+                    }
                 }
                 is PlayerAction.SelectSubtitleTrack -> {
-                    val trackGroup = exoPlayer.currentTracks.groups[action.index]
-                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                        .buildUpon()
-                        .setOverrideForType(TrackSelectionOverride(trackGroup.mediaTrackGroup, 0))
-                        .build()
+                    if (action.index == -1) {
+                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .build()
+                    } else if (action.index in 0 until exoPlayer.currentTracks.groups.size) {
+                        val trackGroup = exoPlayer.currentTracks.groups[action.index]
+                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setOverrideForType(TrackSelectionOverride(trackGroup.mediaTrackGroup, 0))
+                            .build()
+                    }
                 }
             }
             onActionConsumed()

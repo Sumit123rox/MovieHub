@@ -22,16 +22,27 @@ class AddonRepositoryImpl(
         return manager.getAddonUrl(addonId)
     }
 
+    private fun normalizeManifestUrl(rawUrl: String): String {
+        val trimmed = rawUrl.trim()
+        if (trimmed.isEmpty()) return ""
+        val normalizedScheme = when {
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            trimmed.startsWith("stremio://") -> "https://${trimmed.removePrefix("stremio://")}"
+            else -> "https://$trimmed"
+        }
+        val withoutFragment = normalizedScheme.substringBefore("#")
+        val query = withoutFragment.substringAfter("?", "")
+        val path = withoutFragment.substringBefore("?").trimEnd('/')
+        val manifestPath = if (path.endsWith("/manifest.json")) path else "$path/manifest.json"
+        return if (query.isEmpty()) manifestPath else "$manifestPath?$query"
+    }
+
     override suspend fun fetchAddonManifest(url: String): Result<StremioManifest> {
         return try {
-            val sanitizedUrl = if (!url.endsWith("/manifest.json") && !url.contains("/manifest.json?")) {
-                val base = url.substringBefore("?").trimEnd('/')
-                if (url.contains("?")) {
-                    "$base/manifest.json?${url.substringAfter("?")}"
-                } else {
-                    "$base/manifest.json"
-                }
-            } else url
+            val sanitizedUrl = normalizeManifestUrl(url)
+            if (sanitizedUrl.isEmpty()) {
+                return Result.failure(Exception("Addon URL cannot be empty"))
+            }
 
             val manifest = apiClient.getManifest(sanitizedUrl)
             if (manifest != null) {

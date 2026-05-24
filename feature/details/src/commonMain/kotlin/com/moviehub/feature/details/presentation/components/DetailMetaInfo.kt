@@ -2,8 +2,10 @@ package com.moviehub.feature.details.presentation.components
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -108,6 +111,20 @@ fun DetailMetaInfo(
             }
         }
 
+        if (media.genres.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                media.genres.forEach { genre ->
+                    DetailGenreBadge(text = genre)
+                }
+            }
+        }
+
         if (media.directors.isNotEmpty()) {
             MetaLabelValueRow(
                 label = "Director",
@@ -119,6 +136,30 @@ fun DetailMetaInfo(
             MetaLabelValueRow(
                 label = "Writer",
                 value = media.writers.joinToString(", "),
+            )
+        }
+
+        val country = media.country
+        if (!country.isNullOrBlank()) {
+            MetaLabelValueRow(
+                label = "Country",
+                value = country,
+            )
+        }
+
+        val language = media.language
+        if (!language.isNullOrBlank()) {
+            MetaLabelValueRow(
+                label = "Language",
+                value = language.uppercase(),
+            )
+        }
+
+        val status = media.status
+        if (!status.isNullOrBlank()) {
+            MetaLabelValueRow(
+                label = "Status",
+                value = status,
             )
         }
 
@@ -161,17 +202,23 @@ private fun MetaLabelValueRow(
     label: String,
     value: String,
 ) {
-    Row {
+    Row(
+        modifier = Modifier.padding(vertical = 1.dp)
+    ) {
         Text(
             text = "$label:  ",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.6f),
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.2.sp
+            ),
+            color = Color.White.copy(alpha = 0.5f),
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                lineHeight = 20.sp
+            ),
+            color = Color.White.copy(alpha = 0.9f),
         )
     }
 }
@@ -183,19 +230,52 @@ private fun DetailHeroMetaBadge(
 ) {
     Box(
         modifier = Modifier
-            .border(
-                border = BorderStroke(1.dp, contentColor.copy(alpha = 0.55f)),
-                shape = RoundedCornerShape(6.dp),
+            .background(
+                color = Color.White.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(8.dp)
             )
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .border(
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                shape = RoundedCornerShape(8.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.5.sp
+            ),
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun DetailGenreBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .background(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .border(
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.25.sp
+            ),
+            color = Color.White,
         )
     }
 }

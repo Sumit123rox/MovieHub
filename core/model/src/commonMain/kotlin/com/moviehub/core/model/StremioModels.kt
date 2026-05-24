@@ -38,24 +38,22 @@ object StremioResourceListSerializer : KSerializer<List<String>> {
     override fun deserialize(decoder: Decoder): List<String> {
         val input = decoder as? JsonDecoder ?: throw SerializationException("Expected JSON")
         val element = input.decodeJsonElement()
-        return if (element is kotlinx.serialization.json.JsonArray) {
-            element.map { item ->
-                when (item) {
-                    is JsonPrimitive -> {
-                        item.content
-                    }
-
-                    is JsonObject -> {
-                        item["name"]?.jsonPrimitive?.content ?: "unknown"
-                    }
-
-                    else -> {
-                        "unknown"
+        return when (element) {
+            is kotlinx.serialization.json.JsonArray -> {
+                element.map { item ->
+                    when (item) {
+                        is JsonPrimitive -> item.content
+                        is JsonObject -> item["name"]?.jsonPrimitive?.content ?: "unknown"
+                        else -> "unknown"
                     }
                 }
             }
-        } else {
-            emptyList()
+            is JsonPrimitive -> {
+                element.content.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            }
+            else -> {
+                emptyList()
+            }
         }
     }
 
@@ -120,22 +118,28 @@ object StremioPersonListSerializer : KSerializer<List<StremioPerson>> {
     override fun deserialize(decoder: Decoder): List<StremioPerson> {
         val input = decoder as? JsonDecoder ?: throw SerializationException("Expected JSON")
         val element = input.decodeJsonElement()
-        return if (element is kotlinx.serialization.json.JsonArray) {
-            element.map { item ->
-                if (item is JsonPrimitive) {
-                    StremioPerson(name = item.content)
-                } else if (item is JsonObject) {
-                    StremioPerson(
-                        name = item["name"]?.jsonPrimitive?.content ?: "unknown",
-                        role = item["character"]?.jsonPrimitive?.content ?: item["role"]?.jsonPrimitive?.content,
-                        photo = item["photo"]?.jsonPrimitive?.content
-                    )
-                } else {
-                    StremioPerson(name = "unknown")
+        return when (element) {
+            is kotlinx.serialization.json.JsonArray -> {
+                element.map { item ->
+                    if (item is JsonPrimitive) {
+                        StremioPerson(name = item.content)
+                    } else if (item is JsonObject) {
+                        StremioPerson(
+                            name = item["name"]?.jsonPrimitive?.content ?: "unknown",
+                            role = item["character"]?.jsonPrimitive?.content ?: item["role"]?.jsonPrimitive?.content,
+                            photo = item["photo"]?.jsonPrimitive?.content
+                        )
+                    } else {
+                        StremioPerson(name = "unknown")
+                    }
                 }
             }
-        } else {
-            emptyList()
+            is JsonPrimitive -> {
+                element.content.split(",").map { it.trim() }.filter { it.isNotEmpty() }.map { StremioPerson(name = it) }
+            }
+            else -> {
+                emptyList()
+            }
         }
     }
 

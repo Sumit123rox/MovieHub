@@ -15,9 +15,10 @@ import kotlinx.serialization.json.Json
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AddonManager(
     private val addonDao: AddonDao,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     val installedAddons: StateFlow<List<StremioManifest>> = profileRepository.activeProfile
         .flatMapLatest { profile ->
@@ -80,10 +81,11 @@ class AddonManager(
         return installedAddons.value
             .filter { manifest ->
                 manifest.resources.contains(resource) && 
-                manifest.types.any { it.lowercase() in typeAliases }
+                (manifest.types.isEmpty() || manifest.types.any { it.lowercase() in typeAliases })
             }
             .mapNotNull { manifest -> 
                 _addonUrlMap.value[manifest.id]?.let { url -> url to manifest } 
             }
     }
 }
+

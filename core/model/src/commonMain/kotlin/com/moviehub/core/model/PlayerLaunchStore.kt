@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class PlayerLaunch(
     val stream: StreamItem,
+    val streams: List<StreamItem> = emptyList(),
     val title: String? = null,
     val mediaId: String? = null,
     val mediaType: String? = null

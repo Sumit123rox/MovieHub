@@ -12,7 +12,7 @@ import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 
-actual class PlatformDownloader(private val ctx: PlatformContext) {
+actual class PlatformDownloader actual constructor(private val ctx: PlatformContext) {
     private val downloadManager = ctx.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as DownloadManager
 
     actual fun download(item: DownloadItem): String {

@@ -18,7 +18,11 @@ data class StreamItem(
     val isTorrentStream: Boolean
         get() = !infoHash.isNullOrBlank() ||
             url?.trimStart()?.startsWith("magnet:", ignoreCase = true) == true ||
-            externalUrl?.trimStart()?.startsWith("magnet:", ignoreCase = true) == true
+            url?.trimStart()?.startsWith("torrent:", ignoreCase = true) == true ||
+            url?.trim()?.contains(".torrent", ignoreCase = true) == true ||
+            externalUrl?.trimStart()?.startsWith("magnet:", ignoreCase = true) == true ||
+            externalUrl?.trimStart()?.startsWith("torrent:", ignoreCase = true) == true ||
+            externalUrl?.trim()?.contains(".torrent", ignoreCase = true) == true
 
     val hasPlayableSource: Boolean
         get() = url != null || infoHash != null || externalUrl != null

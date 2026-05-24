@@ -133,4 +133,23 @@ class YouTubePlaybackResolver(
             null
         }
     }
+
+    suspend fun searchTrailer(query: String): String? = withContext(Dispatchers.Default) {
+        try {
+            val queryEncoded = query.replace(" ", "+")
+            val searchUrl = "https://www.youtube.com/results?search_query=$queryEncoded"
+            val response = httpClient.get(searchUrl) {
+                header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                header("Accept-Language", "en-US,en;q=0.9")
+            }
+            if (!response.status.isSuccess()) return@withContext null
+            val html = response.bodyAsText()
+            val match = Regex("\"videoId\":\"([a-zA-Z0-9_-]{11})\"").find(html)
+            match?.groupValues?.getOrNull(1)
+        } catch (e: Exception) {
+            logger.e(e) { "Failed to search YouTube trailer for query: $query" }
+            null
+        }
+    }
 }
+

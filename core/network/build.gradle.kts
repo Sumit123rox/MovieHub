@@ -23,6 +23,8 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kermit)
+            implementation(libs.quickjs.kt)
+            implementation(libs.ksoup)
         }
 
         commonTest.dependencies {

@@ -8,4 +8,5 @@ import org.koin.dsl.module
 
 actual val platformModule: Module = module {
     single { PlatformDownloader(get()) }
+    single { com.moviehub.core.network.scraper.PluginStorage(get()) }
 }

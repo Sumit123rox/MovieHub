@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaItem
+import com.moviehub.core.ui.components.shimmerEffect
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 
@@ -69,6 +70,7 @@ fun DetailHero(
                             },
                         alignment = if (isTablet) Alignment.TopCenter else Alignment.Center,
                         contentScale = ContentScale.Crop,
+                        onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
                     )
                 } else {
                     Box(
@@ -131,6 +133,7 @@ fun DetailHero(
                                 modifier = Modifier.fillMaxSize(),
                                 alignment = Alignment.Center,
                                 contentScale = ContentScale.Fit,
+                                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
                             )
                         }
                     } else {

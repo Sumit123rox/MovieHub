@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,10 +44,12 @@ fun Poster(
                     contentDescription = contentDescription,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    onLoading = { progress ->
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(progress = { progress })
-                        }
+                    onLoading = { _ ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .shimmerEffect()
+                        )
                     },
                     onFailure = { error ->
                         logger.e(error) { "Failed to load poster image" }

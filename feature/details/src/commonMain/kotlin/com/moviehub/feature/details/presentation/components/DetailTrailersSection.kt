@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaTrailer
+import com.moviehub.core.ui.components.shimmerEffect
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 
@@ -100,6 +101,7 @@ private fun TrailerItem(
                 contentDescription = trailer.name,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
+                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
             )
             
             Box(

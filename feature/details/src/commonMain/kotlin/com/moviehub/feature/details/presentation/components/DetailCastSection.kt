@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaPerson
+import com.moviehub.core.ui.components.shimmerEffect
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 
@@ -72,6 +73,8 @@ private fun CastItem(
     person: MediaPerson,
     modifier: Modifier = Modifier,
 ) {
+    val avatarUrl = person.photo ?: "https://ui-avatars.com/api/?name=${person.name.replace(" ", "+")}&background=1a1a1a&color=ffffff&size=128"
+
     Column(
         modifier = modifier.width(80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -83,25 +86,25 @@ private fun CastItem(
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            if (person.photo != null) {
-                KamelImage(
-                    resource = { asyncPainterResource(data = person.photo!!) },
-                    contentDescription = person.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = person.name.take(1),
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White.copy(alpha = 0.5f)
-                    )
+            KamelImage(
+                resource = { asyncPainterResource(data = avatarUrl) },
+                contentDescription = person.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                onLoading = { _ -> Box(Modifier.fillMaxSize().shimmerEffect()) },
+                onFailure = { _ ->
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = person.name.take(1),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    }
                 }
-            }
+            )
         }
 
         Column(

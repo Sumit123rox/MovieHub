@@ -1,6 +1,7 @@
 package com.moviehub.core.database
 
 import androidx.room3.Entity
+import com.moviehub.core.utils.currentTimeMillis
 
 @Entity(
     tableName = "watch_history",
@@ -12,5 +13,5 @@ data class WatchHistoryEntity(
     val title: String,
     val type: String,
     val posterPath: String?,
-    val lastWatchedAt: Long = System.currentTimeMillis()
+    val lastWatchedAt: Long = currentTimeMillis()
 )

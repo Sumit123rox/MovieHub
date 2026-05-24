@@ -33,7 +33,8 @@ class HomeRepositoryImpl(
             allAddons.filter { it.id == addonId }
         } else {
             allAddons.filter { manifest ->
-                val matchesType = manifest.types.any { it.lowercase() == type.lowercase() } ||
+                val matchesType = manifest.types.isEmpty() ||
+                                 manifest.types.any { it.lowercase() == type.lowercase() } ||
                                  (type == "series" && manifest.types.any { it.lowercase() in listOf("show", "tv") })
                 
                 val hasCatalog = manifest.catalogs.any { 

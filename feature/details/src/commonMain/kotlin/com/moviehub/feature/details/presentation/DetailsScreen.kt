@@ -16,6 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaType
 import com.moviehub.feature.details.presentation.components.*
+import com.moviehub.core.ui.components.shimmerEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -42,10 +45,49 @@ fun DetailsScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().background(Color.Black).animateContentSize()) {
             if (state.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = paddingValues.calculateBottomPadding())
+                ) {
+                    // Hero Image Placeholder Shimmer
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(350.dp)
+                            .shimmerEffect()
+                    )
+                    
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Title Placeholder Shimmer
+                        Box(
+                            modifier = Modifier
+                                .width(220.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .shimmerEffect()
+                        )
+                        
+                        // Metadata Row Placeholder Shimmer
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(modifier = Modifier.width(60.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                            Box(modifier = Modifier.width(80.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                            Box(modifier = Modifier.width(50.dp).height(18.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                        }
+                        
+                        // Description Lines Placeholder Shimmer
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                            Box(modifier = Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                            Box(modifier = Modifier.fillMaxWidth(0.6f).height(16.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
+                        }
+                    }
+                }
             } else if (state.mediaItem != null) {
                 val media = state.mediaItem!!
                 
@@ -84,8 +126,6 @@ fun DetailsScreen(
                                 .padding(horizontal = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            DetailMetaInfo(media = media)
-                            
                             DetailActionButtons(
                                 onPlayClick = { 
                                     val streamId = if (media.type == MediaType.SHOW) {
@@ -96,6 +136,8 @@ fun DetailsScreen(
                                 },
                                 onSaveClick = { /* Handle Save */ }
                             )
+
+                            DetailMetaInfo(media = media)
                         }
                     }
 

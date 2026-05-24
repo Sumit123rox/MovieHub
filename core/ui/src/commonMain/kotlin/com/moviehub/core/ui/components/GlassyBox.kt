@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -21,7 +22,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun GlassyBox(
     modifier: Modifier = Modifier,
-    blurRadius: androidx.compose.ui.unit.Dp = 16.dp,
+    blurRadius: Dp = 16.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
@@ -52,7 +53,7 @@ fun GlassyBox(
                     )
                 )
         )
-        
+
         // Content layer (not blurred)
         Box(modifier = Modifier) {
             content()

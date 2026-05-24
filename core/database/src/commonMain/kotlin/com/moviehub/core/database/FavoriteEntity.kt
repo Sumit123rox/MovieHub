@@ -1,6 +1,7 @@
 package com.moviehub.core.database
 
 import androidx.room3.Entity
+import com.moviehub.core.utils.currentTimeMillis
 
 enum class ContentType {
     MOVIE,
@@ -17,5 +18,5 @@ data class FavoriteEntity(
     val contentType: ContentType,
     val title: String,
     val posterUrl: String?,
-    val addedTimestamp: Long = System.currentTimeMillis()
+    val addedTimestamp: Long = currentTimeMillis()
 )

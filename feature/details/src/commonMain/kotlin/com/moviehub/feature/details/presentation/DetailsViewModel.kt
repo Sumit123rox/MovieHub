@@ -30,6 +30,9 @@ class DetailsViewModel(
     }
 
     private fun loadDetails(id: String, type: String, addonUrl: String?) {
+        if (_state.value.mediaItem?.id == id && !_state.value.isLoading && _state.value.error == null) {
+            return
+        }
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null, streams = emptyList(), isSearchingStreams = false)
             
@@ -42,9 +45,38 @@ class DetailsViewModel(
                 error = if (details == null) "Failed to load details" else null
             )
 
-            if (details != null && type.lowercase() == "movie") {
-                // 2. Fetch Streams ONLY for movies by default
-                loadStreams(id, type)
+            if (details != null) {
+                if (type.lowercase() == "movie") {
+                    // 2. Fetch Streams ONLY for movies by default
+                    loadStreams(id, type)
+                }
+
+                // 3. Fallback trailer search if empty
+                if (details.trailers.isEmpty()) {
+                    launch {
+                        val searchTitle = details.title
+                        val year = details.releaseInfo?.take(4) ?: ""
+                        val query = "$searchTitle $year official trailer"
+                        val ytId = ytResolver.searchTrailer(query)
+                        if (ytId != null) {
+                            val currentMediaItem = _state.value.mediaItem
+                            if (currentMediaItem != null && currentMediaItem.id == details.id) {
+                                _state.value = _state.value.copy(
+                                    mediaItem = currentMediaItem.copy(
+                                        trailers = listOf(
+                                            com.moviehub.core.model.MediaTrailer(
+                                                id = ytId,
+                                                url = ytId,
+                                                name = "Official Trailer",
+                                                type = "Trailer"
+                                            )
+                                        )
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

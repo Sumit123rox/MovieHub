@@ -22,6 +22,10 @@ import androidx.compose.ui.unit.dp
 import com.moviehub.core.ui.components.GlassyBox
 import com.moviehub.core.ui.components.Poster
 import com.moviehub.core.ui.components.VerticalGrid
+import com.moviehub.core.ui.components.shimmerEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.aspectRatio
 import moviehub.core.ui.generated.resources.Res
 import moviehub.core.ui.generated.resources.search_hint
 import org.jetbrains.compose.resources.stringResource
@@ -75,7 +79,18 @@ fun SearchScreen(
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (state.isLoading) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    VerticalGrid(
+                        items = List(9) { "" },
+                        modifier = Modifier.fillMaxSize()
+                    ) { _, _ ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(0.67f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .shimmerEffect()
+                        )
+                    }
                 } else if (state.results.isNotEmpty()) {
                     VerticalGrid(
                         items = state.results,

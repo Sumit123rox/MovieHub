@@ -6,9 +6,12 @@ import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.network.AddonManager
 import com.moviehub.core.network.DownloadsRepository
 import com.moviehub.core.network.StremioApiClient
+import com.moviehub.core.network.scraper.PluginRepository
+import com.moviehub.core.network.scraper.ScraperManager
 import com.moviehub.feature.addon.data.AddonRepository
 import com.moviehub.feature.addon.data.AddonRepositoryImpl
 import com.moviehub.feature.addon.presentation.AddonViewModel
+import com.moviehub.feature.addon.presentation.PluginsViewModel
 import com.moviehub.feature.auth.data.AuthRepository
 import com.moviehub.feature.auth.data.AuthRepositoryImpl
 import com.moviehub.feature.auth.presentation.AuthViewModel
@@ -23,9 +26,9 @@ import com.moviehub.feature.search.data.SearchRepository
 import com.moviehub.feature.search.data.SearchRepositoryImpl
 import com.moviehub.feature.search.presentation.SearchViewModel
 import com.moviehub.feature.sync.SyncManager
+import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
-import io.github.jan.supabase.auth.Auth
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -51,7 +54,7 @@ val databaseModule = module {
 expect val platformModule: Module
 
 val networkModule = module {
-    single { 
+    single {
         createSupabaseClient(
             supabaseUrl = "https://your-project.supabase.co",
             supabaseKey = "your-anon-key"
@@ -74,13 +77,15 @@ val networkModule = module {
                 })
             }
             install(io.ktor.client.plugins.HttpTimeout) {
-                requestTimeoutMillis = 30000
-                connectTimeoutMillis = 15000
-                socketTimeoutMillis = 30000
+                connectTimeoutMillis = 5000
+                requestTimeoutMillis = 8000
+                socketTimeoutMillis = 8000
             }
         }
     }
     single { StremioApiClient(get()) }
+    single { ScraperManager(get()) }
+    single { PluginRepository(get(), get(), get(), get()) }
     single { com.moviehub.core.network.YouTubePlaybackResolver(get()) }
 }
 
@@ -97,10 +102,11 @@ val searchModule = module {
 val addonModule = module {
     single<AddonRepository> { AddonRepositoryImpl(get(), get()) }
     viewModel { AddonViewModel(get()) }
+    viewModel { PluginsViewModel(get()) }
 }
 
 val detailsModule = module {
-    single<DetailsRepository> { DetailsRepositoryImpl(get(), get()) }
+    single<DetailsRepository> { DetailsRepositoryImpl(get(), get(), get()) }
     viewModel { DetailsViewModel(get(), get()) }
 }
 

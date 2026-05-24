@@ -1,9 +1,10 @@
 package com.moviehub.core.network
 
+import com.moviehub.core.database.PlatformContext
 import com.moviehub.core.model.DownloadItem
 import kotlinx.coroutines.flow.Flow
 
-expect class PlatformDownloader {
+expect class PlatformDownloader(ctx: PlatformContext) {
     fun download(item: DownloadItem): String // Returns task ID
     fun pause(taskId: String)
     fun resume(taskId: String)

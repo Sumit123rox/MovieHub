@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.MediaType
 import com.moviehub.core.model.MediaVideo
+import com.moviehub.core.ui.components.shimmerEffect
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 
@@ -445,6 +446,7 @@ private fun SeasonPosterButton(
                     contentDescription = label,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
+                    onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
                 )
             } else {
                 Box(
@@ -558,13 +560,31 @@ private fun EpisodeHorizontalCard(
                 onClick = { onClick?.invoke() },
             ),
     ) {
-        val imageUrl = video.thumbnail ?: fallbackImage
+        val imageUrl = video.thumbnail?.takeIf { it.isNotBlank() } ?: fallbackImage?.takeIf { it.isNotBlank() }
         if (imageUrl != null) {
             KamelImage(
                 resource = { asyncPainterResource(data = imageUrl) },
                 contentDescription = video.title,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
+                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) },
+                onFailure = { error ->
+                    co.touchlab.kermit.Logger.e("EpisodeCard") {
+                        "Failed to load image for episode '${video.title}' from URL '$imageUrl': ${error.message}"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = video.title.take(1),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    }
+                }
             )
         }
 

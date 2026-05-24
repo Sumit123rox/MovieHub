@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.ui.components.Poster
 import com.moviehub.core.ui.components.VerticalGrid
+import com.moviehub.core.ui.components.shimmerEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.aspectRatio
 import com.moviehub.feature.home.data.HomeRepository
 import kotlinx.coroutines.launch
 import moviehub.core.ui.generated.resources.Res
@@ -46,20 +50,22 @@ fun CatalogScreen(
     onBackClick: () -> Unit,
     repository: HomeRepository = koinInject()
 ) {
-    var items by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var allFetchedItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var displayedItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isPaginating by remember { mutableStateOf(false) }
-    var skip by remember { mutableStateOf(0) }
     var canPaginate by remember { mutableStateOf(true) }
     
+    val pageSize = 15
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(type, catalogId, addonId) {
         isLoading = true
-        skip = 0
-        items = repository.getCatalog(type, catalogId, addonId, skip = 0)
+        val fetched = repository.getCatalog(type, catalogId, addonId, skip = 0)
+        allFetchedItems = fetched
+        displayedItems = fetched.take(pageSize)
         isLoading = false
-        canPaginate = items.size >= 20 
+        canPaginate = fetched.isNotEmpty()
     }
 
     Scaffold(
@@ -85,30 +91,49 @@ fun CatalogScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color.Black)) {
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
-            } else if (items.isNotEmpty()) {
                 VerticalGrid(
-                    items = items,
+                    items = List(9) { "" },
+                    modifier = Modifier.fillMaxSize()
+                ) { _, _ ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(0.67f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .shimmerEffect()
+                    )
+                }
+            } else if (displayedItems.isNotEmpty()) {
+                VerticalGrid(
+                    items = displayedItems,
                     modifier = Modifier.fillMaxSize()
                 ) { index, movie ->
-                    // Simple pagination trigger
-                    if (index >= items.size - 4 && !isPaginating && canPaginate) {
+                    // Trigger pagination when getting close to the end of currently displayed items
+                    if (index >= displayedItems.size - 4 && !isPaginating && canPaginate) {
                         isPaginating = true
                         scope.launch {
-                            val nextSkip = skip + 20 
-                            val newItems = repository.getCatalog(type, catalogId, addonId, skip = nextSkip)
-                            
-                            // Check if we actually got new unique items
-                            val existingIds = items.map { it.id }.toSet()
-                            val uniqueNewItems = newItems.filter { it.id !in existingIds }
-                            
-                            if (uniqueNewItems.isNotEmpty()) {
-                                items = items + uniqueNewItems
-                                skip = nextSkip
+                            if (displayedItems.size < allFetchedItems.size) {
+                                // Local Pagination: load next chunk of 15 from cache
+                                val nextSize = (displayedItems.size + pageSize).coerceAtMost(allFetchedItems.size)
+                                displayedItems = allFetchedItems.take(nextSize)
+                                isPaginating = false
                             } else {
-                                canPaginate = false
+                                // Network Pagination: load next page from API
+                                val nextSkip = allFetchedItems.size
+                                val newItems = repository.getCatalog(type, catalogId, addonId, skip = nextSkip)
+                                
+                                val existingIds = allFetchedItems.map { it.id }.toSet()
+                                val uniqueNewItems = newItems.filter { it.id !in existingIds }
+                                
+                                if (uniqueNewItems.isNotEmpty()) {
+                                    allFetchedItems = allFetchedItems + uniqueNewItems
+                                    val nextSize = displayedItems.size + pageSize
+                                    displayedItems = allFetchedItems.take(nextSize)
+                                } else {
+                                    canPaginate = false
+                                }
+                                isPaginating = false
                             }
-                            isPaginating = false
                         }
                     }
                     
@@ -119,7 +144,7 @@ fun CatalogScreen(
                     )
                 }
                 
-                if (isPaginating) {
+                if (isPaginating && displayedItems.size == allFetchedItems.size) {
                     Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(16.dp)) {
                         CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
                     }

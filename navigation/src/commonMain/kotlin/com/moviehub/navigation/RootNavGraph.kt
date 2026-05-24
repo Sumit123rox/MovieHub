@@ -1,5 +1,6 @@
 package com.moviehub.navigation
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -27,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -62,12 +64,21 @@ import org.koin.compose.viewmodel.koinViewModel
 fun RootNavGraph() {
     val navController = rememberNavController()
     val profileRepository: ProfileRepository = koinInject()
+    val activeProfile by profileRepository.activeProfile.collectAsState()
 
-    // Dynamically determine the start destination based on active profile
-    val initialStartDestination = if (profileRepository.activeProfile.value != null) {
-        Screen.Home
-    } else {
-        Screen.Profile
+    // Redirect to Profile selection if there's no active profile
+    LaunchedEffect(activeProfile) {
+        if (activeProfile == null) {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            if (currentRoute?.contains("Profile") != true) {
+                navController.navigate(Screen.Profile) {
+                    // Ensure Screen.Home is kept at the root of backstack
+                    popUpTo(Screen.Home) {
+                        inclusive = false
+                    }
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -77,15 +88,21 @@ fun RootNavGraph() {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
             
-            val isBottomBarVisible = currentDestination?.hierarchy?.any { 
-                it.route?.contains("Home") == true || 
+            // Only show bottom bar when active profile is selected and not on the profile choose screen itself
+            val isBottomBarVisible = activeProfile != null && currentDestination?.hierarchy?.any { 
+                (it.route?.contains("Home") == true || 
                 it.route?.contains("Search") == true || 
                 it.route?.contains("Sync") == true || 
                 it.route?.contains("Addon") == true ||
-                it.route?.contains("Settings") == true
+                it.route?.contains("Settings") == true) &&
+                it.route?.contains("Profile") != true
             } == true
             
-            if (isBottomBarVisible) {
+            AnimatedVisibility(
+                visible = isBottomBarVisible,
+                enter = fadeIn(animationSpec = tween(300)),
+                exit = fadeOut(animationSpec = tween(300))
+            ) {
                 NavigationBar(
                     containerColor = Color.Black,
                     contentColor = MaterialTheme.colorScheme.primary
@@ -129,7 +146,7 @@ fun RootNavGraph() {
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = initialStartDestination,
+            startDestination = Screen.Home,
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
@@ -152,6 +169,9 @@ fun RootNavGraph() {
                     },
                     onSearchClick = {
                         navController.navigate(Screen.Search)
+                    },
+                    onAddonsClick = {
+                        navController.navigate(Screen.Addon)
                     }
                 )
             }
@@ -197,9 +217,6 @@ fun RootNavGraph() {
                     onSwitchProfile = {
                         scope.launch {
                             profileRepository.setActiveProfile(null)
-                            navController.navigate(Screen.Profile) {
-                                popUpTo(0) { inclusive = true }
-                            }
                         }
                     },
                     onNavigateToSync = {
@@ -228,10 +245,12 @@ fun RootNavGraph() {
                     id = streams.id,
                     type = streams.type,
                     mediaId = streams.mediaId,
-                    onPlayClick = { stream ->
+                    onPlayClick = { stream, allStreams, title ->
                         val launchId = PlayerLaunchStore.put(
                             PlayerLaunch(
                                 stream = stream,
+                                streams = allStreams,
+                                title = title,
                                 mediaId = streams.id,
                                 mediaType = streams.type
                             )
@@ -247,6 +266,8 @@ fun RootNavGraph() {
                 if (launch != null) {
                     PlayerScreen(
                         stream = launch.stream,
+                        streams = launch.streams,
+                        title = launch.title ?: "Playing...",
                         onBackClick = { navController.popBackStack() }
                     )
                 } else {
