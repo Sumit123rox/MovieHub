@@ -1,6 +1,7 @@
 package com.moviehub.core.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -159,6 +160,7 @@ data class StremioMeta(
     val id: String,
     val type: String,
     val name: String,
+    @SerialName("imdb_id") val imdbId: String? = null,
     val poster: String? = null,
     val background: String? = null,
     val logo: String? = null,

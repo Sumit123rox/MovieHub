@@ -1,6 +1,10 @@
 package com.moviehub.feature.details.presentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -23,8 +28,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.TheaterComedy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,7 +50,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,15 +63,21 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.StreamItem
+import com.moviehub.core.model.DownloadItem
+import com.moviehub.core.model.DownloadState
+import com.moviehub.core.network.DownloadsRepository
 import com.moviehub.core.ui.components.GlassyBox
 import com.moviehub.core.ui.components.TechnicalBadge
 import com.moviehub.core.ui.components.shimmerEffect
 import com.moviehub.core.ui.theme.MovieHubColors
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -69,7 +85,7 @@ fun StreamDiscoveryIndicator(processed: Int, total: Int) {
     GlassyBox(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(bottom = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -81,7 +97,7 @@ fun StreamDiscoveryIndicator(processed: Int, total: Int) {
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Global Stream Discovery",
+                    text = "Searching Addons",
                     style = MaterialTheme.typography.titleSmall,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
@@ -90,16 +106,16 @@ fun StreamDiscoveryIndicator(processed: Int, total: Int) {
             Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
                 progress = { if (total > 0) processed.toFloat() / total else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp)
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(2.dp)),
+                modifier = Modifier.fillMaxWidth().height(4.dp),
                 color = MaterialTheme.colorScheme.primary,
+                trackColor = Color.White.copy(alpha = 0.15f),
                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Searching $processed of $total addons...",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.6f)
+                color = Color.White.copy(alpha = 0.5f)
             )
         }
     }
@@ -110,11 +126,14 @@ fun StreamsScreen(
     id: String,
     type: String,
     mediaId: String? = null,
-    onPlayClick: (stream: StreamItem, streams: List<StreamItem>, title: String?) -> Unit,
+    onPlayClick: (stream: StreamItem, streams: List<StreamItem>, title: String?, posterUrl: String?) -> Unit,
     onBackClick: () -> Unit,
     viewModel: DetailsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val downloadsRepository: DownloadsRepository = koinInject()
+    val profileRepository: com.moviehub.core.database.ProfileRepository = koinInject()
+    val scope = rememberCoroutineScope()
     var activeTorrentStream by remember { mutableStateOf<StreamItem?>(null) }
 
     LaunchedEffect(id, type, mediaId) {
@@ -123,31 +142,59 @@ fun StreamsScreen(
     }
 
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
+        // Try backgroundUrl, fallback to posterUrl
+        val backdropUrl = state.mediaItem?.backgroundUrl
+            ?: state.mediaItem?.posterUrl
+        val hasBackdrop = backdropUrl != null
+
         Box(modifier = Modifier.fillMaxSize()) {
-            // Background Backdrop
-            state.mediaItem?.backgroundUrl?.let { backdrop ->
-                KamelImage(
-                    resource = { asyncPainterResource(data = backdrop) },
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
-                )
+            // ===== FULLSCREEN BACKDROP =====
+            if (hasBackdrop) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Black.copy(alpha = 0.7f),
-                                    Color.Black
+                        .align(Alignment.TopCenter)
+                ) {
+                    KamelImage(
+                        resource = { asyncPainterResource(data = backdropUrl) },
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
+                    )
+                    // Deep gradient — dark at edges, very transparent center
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.Black.copy(alpha = 0.7f),
+                                        Color.Black.copy(alpha = 0.25f),
+                                        Color.Black.copy(alpha = 0.3f),
+                                        Color.Black.copy(alpha = 0.7f),
+                                    )
                                 )
                             )
-                        )
-                )
+                    )
+                    // Additional radial gradient to keep edges dark while center is visible
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.35f),
+                                        Color.Black.copy(alpha = 0.7f),
+                                    )
+                                )
+                            )
+                    )
+                }
             }
 
             Column(
@@ -155,7 +202,7 @@ fun StreamsScreen(
                     .fillMaxSize()
                     .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
             ) {
-                // Header
+                // ===== HEADER =====
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -164,7 +211,10 @@ fun StreamsScreen(
                 ) {
                     IconButton(
                         onClick = onBackClick,
-                        modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)
+                        modifier = Modifier.background(
+                            Color.Black.copy(alpha = 0.4f),
+                            CircleShape
+                        )
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -184,46 +234,47 @@ fun StreamsScreen(
                             Text(
                                 text = it,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = Color.White.copy(alpha = 0.65f),
                                 maxLines = 1
                             )
                         }
                     }
                 }
 
+                // ===== STREAM CONTENT =====
                 if (state.isSearchingStreams && state.streams.isEmpty()) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(16.dp)
                     ) {
-                        Text(
-                            text = "Searching for streams...",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        repeat(5) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(80.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .shimmerEffect()
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                text = "Searching for streams...",
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.bodyMedium
                             )
+                            repeat(5) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(80.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .shimmerEffect()
+                                )
+                            }
                         }
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
+                            start = 12.dp,
+                            end = 12.dp,
                             top = 8.dp,
-                            bottom = paddingValues.calculateBottomPadding() + 16.dp
+                            bottom = paddingValues.calculateBottomPadding() + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp
                         ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         if (state.isSearchingStreams) {
                             item {
@@ -234,16 +285,34 @@ fun StreamsScreen(
                             }
                         }
 
-                        items(state.streams) { stream ->
+                        items(state.streams, key = { it.url ?: it.infoHash ?: it.name ?: "" }) { stream ->
                             StreamItemCard(
                                 stream = stream,
                                 onClick = {
                                     if (stream.isTorrentStream) {
                                         activeTorrentStream = stream
                                     } else {
-                                        onPlayClick(stream, state.streams, state.mediaItem?.title)
+                                        onPlayClick(stream, state.streams, state.mediaItem?.title, state.mediaItem?.posterUrl)
                                     }
-                                }
+                                },
+                                onDownloadClick = if (stream.url != null || stream.externalUrl != null) { {
+                                    val url = stream.url ?: stream.externalUrl ?: return@StreamItemCard
+                                    val profileId = profileRepository.activeProfile.value?.id ?: return@StreamItemCard
+                                    scope.launch {
+                                        downloadsRepository.startDownload(
+                                            DownloadItem(
+                                                id = "${mediaId ?: id}_${url.hashCode().let { if (it < 0) -it else it }}",
+                                                profileId = profileId,
+                                                mediaId = mediaId ?: id,
+                                                title = state.mediaItem?.title ?: stream.name ?: "Unknown",
+                                                posterUrl = state.mediaItem?.posterUrl,
+                                                url = url,
+                                                headers = stream.behaviorHints.proxyHeaders?.request ?: emptyMap(),
+                                                state = DownloadState.QUEUED
+                                            )
+                                        )
+                                    }
+                                } } else { null }
                             )
                         }
 
@@ -252,14 +321,30 @@ fun StreamsScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 100.dp),
+                                        .padding(top = 60.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "No streams found.\nTry adding more addons.",
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = Icons.Default.TheaterComedy,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = 0.25f),
+                                            modifier = Modifier.size(64.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = "No streams found",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = Color.White.copy(alpha = 0.5f)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Try adding more addons or check back later",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.35f),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -280,7 +365,8 @@ fun StreamsScreen(
 @Composable
 fun StreamItemCard(
     stream: StreamItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDownloadClick: (() -> Unit)? = null
 ) {
     GlassyBox(
         modifier = Modifier
@@ -288,57 +374,138 @@ fun StreamItemCard(
             .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Flag/Region Indicator
+            // ===== FLAG / SOURCE ICON =====
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                    .size(44.dp)
+                    .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = getFlagEmoji(stream.name ?: stream.description),
-                    fontSize = 20.sp
+                    fontSize = 22.sp
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
+            // ===== DETAILS =====
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stream.name ?: "Unknown Source",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
+                // Source name & file size
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stream.name ?: "Unknown Source",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // File size badge
+                    stream.behaviorHints.videoSize?.let { size ->
+                        if (size > 0) {
+                            Text(
+                                text = formatBytes(size),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                ),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Addon name
                 stream.addonName?.let {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = it,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    extractTechnicalSpecs(stream.description).forEach { spec ->
-                        TechnicalBadge(spec)
+                // Technical badges row
+                Spacer(modifier = Modifier.height(6.dp))
+                val specs = extractTechnicalSpecs(stream.description)
+                if (specs.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        specs.forEach { spec ->
+                            TechnicalBadge(spec)
+                        }
                     }
+                }
+
+                // Description / filename shown if no specs extracted
+                if (specs.isEmpty() && !stream.description.isNullOrBlank()) {
+                    Text(
+                        text = stream.description ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.45f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // ===== PLAY BUTTON =====
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // ===== DOWNLOAD BUTTON =====
+            if (onDownloadClick != null) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable(onClick = onDownloadClick)
+                        .background(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Download",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -355,6 +522,8 @@ fun getFlagEmoji(text: String?): String {
         t.contains("DE") || t.contains("GERMANY") -> "🇩🇪"
         t.contains("IT") || t.contains("ITALY") -> "🇮🇹"
         t.contains("BR") || t.contains("BRAZIL") -> "🇧🇷"
+        t.contains("JP") || t.contains("JAPAN") -> "🇯🇵"
+        t.contains("KR") || t.contains("SOUTH KOREA") -> "🇰🇷"
         else -> "🌐"
     }
 }
@@ -364,14 +533,11 @@ private fun extractTechnicalSpecs(title: String?): List<String> {
     val specs = mutableListOf<String>()
     val lowerTitle = title.lowercase()
 
-    if (lowerTitle.contains("4k") || lowerTitle.contains("2160p") || lowerTitle.contains("uhd")) specs.add(
-        "4K"
-    )
+    if (lowerTitle.contains("4k") || lowerTitle.contains("2160p") || lowerTitle.contains("uhd")) specs.add("4K")
     if (lowerTitle.contains("1080p") || lowerTitle.contains("fhd")) specs.add("1080P")
-    if (lowerTitle.contains("720p") || lowerTitle.contains("hd")) if (!specs.contains("4K") && !specs.contains(
-            "1080P"
-        )
-    ) specs.add("720P")
+    if (lowerTitle.contains("720p") || lowerTitle.contains("hd")) {
+        if (!specs.contains("4K") && !specs.contains("1080P")) specs.add("720P")
+    }
 
     if (lowerTitle.contains("hdr")) specs.add("HDR")
     if (lowerTitle.contains("dv") || lowerTitle.contains("dolby vision")) specs.add("DV")
@@ -440,7 +606,7 @@ fun TorrentStreamDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF161616),
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
         title = {
             Row(
@@ -451,7 +617,7 @@ fun TorrentStreamDialog(
                     modifier = Modifier
                         .size(40.dp)
                         .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                             CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -460,14 +626,14 @@ fun TorrentStreamDialog(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 Text(
                     text = "P2P Torrent Stream",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
@@ -476,13 +642,13 @@ fun TorrentStreamDialog(
                 Text(
                     text = "Standard media players cannot play peer-to-peer torrent or magnet links directly.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                 )
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f), RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -492,7 +658,7 @@ fun TorrentStreamDialog(
                             text = fileName,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 3
                         )
 
@@ -517,19 +683,19 @@ fun TorrentStreamDialog(
                             Text(
                                 text = "Hash: $displayHash",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
                             )
                         }
                     }
                 }
 
                 Text(
-                    text = "Click 'Play Externally' to open this stream in VLC, Stremio, TorrServe, or copy it to stream via Debrid / Torrent manager.",
+                    text = "Open this stream in an external player like VLC, Stremio, or TorrServe, or copy the magnet link for a Debrid / Torrent manager.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
 
-                if (!errorMessage.isNullOrBlank()) {
+                AnimatedVisibility(visible = !errorMessage.isNullOrBlank(), enter = fadeIn(), exit = fadeOut()) {
                     Text(
                         text = errorMessage!!,
                         style = MaterialTheme.typography.labelSmall,
@@ -538,7 +704,7 @@ fun TorrentStreamDialog(
                     )
                 }
 
-                if (!successMessage.isNullOrBlank()) {
+                AnimatedVisibility(visible = !successMessage.isNullOrBlank(), enter = fadeIn(), exit = fadeOut()) {
                     Text(
                         text = successMessage!!,
                         style = MaterialTheme.typography.labelSmall,
@@ -557,7 +723,7 @@ fun TorrentStreamDialog(
                             uriHandler.openUri(magnetUrl)
                         } catch (e: Exception) {
                             errorMessage =
-                                "No compatible external player found. Please install VLC or copy the magnet link."
+                                "No compatible external player found. Try VLC or copy the magnet link."
                         }
                     } else {
                         errorMessage = "Failed to construct magnet URL."
@@ -565,7 +731,7 @@ fun TorrentStreamDialog(
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -578,19 +744,19 @@ fun TorrentStreamDialog(
                     onClick = {
                         if (magnetUrl != null) {
                             clipboardManager.setText(AnnotatedString(magnetUrl))
-                            successMessage = "Magnet link copied to clipboard!"
+                            successMessage = "Magnet link copied!"
                             errorMessage = null
                         } else {
                             errorMessage = "Failed to construct magnet URL."
                         }
                     },
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color.White.copy(alpha = 0.8f)
+                        contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                     ),
                     shape = RoundedCornerShape(12.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        Color.White.copy(alpha = 0.2f)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                     )
                 ) {
                     Text("Copy Magnet")
@@ -599,7 +765,7 @@ fun TorrentStreamDialog(
                 TextButton(
                     onClick = onDismiss,
                     colors = ButtonDefaults.textButtonColors(
-                        contentColor = Color.White.copy(alpha = 0.6f)
+                        contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     )
                 ) {
                     Text("Cancel")

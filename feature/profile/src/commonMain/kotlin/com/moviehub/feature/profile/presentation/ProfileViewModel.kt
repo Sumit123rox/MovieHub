@@ -7,6 +7,7 @@ import com.moviehub.core.model.Profile
 import com.moviehub.core.network.AddonManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -25,6 +26,9 @@ class ProfileViewModel(
     val uiState: StateFlow<ProfileUiState> = profileRepository.profiles
         .map { profiles ->
             ProfileUiState(profiles = profiles, isLoading = false)
+        }
+        .catch { e ->
+            emit(ProfileUiState(profiles = emptyList(), isLoading = false, error = e.message))
         }
         .stateIn(
             scope = viewModelScope,

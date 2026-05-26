@@ -24,7 +24,7 @@ class YouTubePlaybackResolver(
     private val apiKeyRegex = Regex("\"INNERTUBE_API_KEY\":\"([^\"]+)\"")
     private val visitorDataRegex = Regex("\"VISITOR_DATA\":\"([^\"]+)\"")
 
-    suspend fun resolveFromYouTubeId(videoId: String): TrailerPlaybackSource? = withContext(Dispatchers.Default) {
+    suspend fun resolveFromYouTubeId(videoId: String): TrailerPlaybackSource? = withContext(Dispatchers.IO) {
         if (!videoIdRegex.matches(videoId)) return@withContext null
 
         try {
@@ -134,7 +134,7 @@ class YouTubePlaybackResolver(
         }
     }
 
-    suspend fun searchTrailer(query: String): String? = withContext(Dispatchers.Default) {
+    suspend fun searchTrailer(query: String): String? = withContext(Dispatchers.IO) {
         try {
             val queryEncoded = query.replace(" ", "+")
             val searchUrl = "https://www.youtube.com/results?search_query=$queryEncoded"

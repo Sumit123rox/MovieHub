@@ -25,13 +25,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.moviehub.core.ui.theme.MovieHubColors
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -77,11 +77,20 @@ fun AuthScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
+            if (state.error != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = state.error!!,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+            }
             if (state.authSuccessMessage != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = state.authSuccessMessage!!,
-                    color = Color(0xFF4CAF50),
+                    color = MovieHubColors.Success,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -142,7 +151,7 @@ fun AuthScreen(
                     if (state.debridCode != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Enter code at real-debrid.com/device:", style = MaterialTheme.typography.bodyMedium)
-                        Text(state.debridCode!!, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                        Text(state.debridCode!!, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MovieHubColors.Success)
                     } else {
                         Text(
                             text = "Connect Real-Debrid for high-speed, buffer-free playback.",
@@ -153,7 +162,7 @@ fun AuthScreen(
                         Button(
                             onClick = { viewModel.onAction(AuthAction.StartDebridAuth) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)) // Success Green
+                            colors = ButtonDefaults.buttonColors(containerColor = MovieHubColors.Success)
                         ) {
                             Icon(Icons.Default.QrCode, contentDescription = null)
                             Spacer(modifier = Modifier.size(8.dp))

@@ -2,6 +2,7 @@ package com.moviehub.feature.auth.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.touchlab.kermit.Logger
 import com.moviehub.feature.auth.data.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ sealed interface AuthAction {
 }
 
 class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
+    private val logger = Logger.withTag("AuthViewModel")
     private val _state = MutableStateFlow(AuthState())
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
@@ -51,6 +53,12 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
             val result = repository.pollTraktAuth(code)
             if (result.isSuccess) {
                 _state.value = _state.value.copy(traktCode = null, authSuccessMessage = "Trakt Authenticated Successfully!")
+            } else {
+                _state.value = _state.value.copy(
+                    traktCode = null,
+                    error = result.exceptionOrNull()?.message ?: "Trakt authentication failed"
+                )
+                logger.w { "Trakt polling failed: ${result.exceptionOrNull()?.message}" }
             }
         }
     }
@@ -74,6 +82,12 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
             val result = repository.pollDebridAuth(code)
             if (result.isSuccess) {
                 _state.value = _state.value.copy(debridCode = null, authSuccessMessage = "Real-Debrid Authenticated Successfully!")
+            } else {
+                _state.value = _state.value.copy(
+                    debridCode = null,
+                    error = result.exceptionOrNull()?.message ?: "Real-Debrid authentication failed"
+                )
+                logger.w { "Debrid polling failed: ${result.exceptionOrNull()?.message}" }
             }
         }
     }

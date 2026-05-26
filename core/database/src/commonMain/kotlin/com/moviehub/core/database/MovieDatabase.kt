@@ -18,7 +18,7 @@ import androidx.room3.TypeConverters
         ProfileEntity::class,
         DownloadEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

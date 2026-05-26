@@ -1,6 +1,7 @@
 package com.moviehub.feature.details.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,6 +39,7 @@ fun DetailCastSection(
     cast: List<MediaPerson>,
     modifier: Modifier = Modifier,
     showHeader: Boolean = true,
+    onCastClick: ((MediaPerson) -> Unit)? = null,
 ) {
     if (cast.isEmpty()) return
 
@@ -50,7 +51,7 @@ fun DetailCastSection(
             Text(
                 text = "Cast",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
@@ -61,8 +62,11 @@ fun DetailCastSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(cast) { person ->
-                CastItem(person = person)
+            items(cast, key = { "${it.name}_${it.role}" }) { person ->
+                CastItem(
+                    person = person,
+                    onClick = onCastClick?.let { { it(person) } }
+                )
             }
         }
     }
@@ -72,11 +76,19 @@ fun DetailCastSection(
 private fun CastItem(
     person: MediaPerson,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
-    val avatarUrl = person.photo ?: "https://ui-avatars.com/api/?name=${person.name.replace(" ", "+")}&background=1a1a1a&color=ffffff&size=128"
+    val hasPhoto = person.photo != null && person.photo!!.startsWith("http")
+    val avatarUrl = if (hasPhoto) {
+        person.photo
+    } else {
+        "https://ui-avatars.com/api/?name=${person.name.replace(" ", "+")}&background=1a1a1a&color=ffffff&size=128"
+    }
 
     Column(
-        modifier = modifier.width(80.dp),
+        modifier = modifier
+            .width(80.dp)
+            .clickable(enabled = onClick != null, onClick = { onClick?.invoke() }),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -86,25 +98,38 @@ private fun CastItem(
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            KamelImage(
-                resource = { asyncPainterResource(data = avatarUrl) },
-                contentDescription = person.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                onLoading = { _ -> Box(Modifier.fillMaxSize().shimmerEffect()) },
-                onFailure = { _ ->
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = person.name.take(1),
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = Color.White.copy(alpha = 0.5f)
-                        )
+            if (avatarUrl != null) {
+                KamelImage(
+                    resource = { asyncPainterResource(data = avatarUrl) },
+                    contentDescription = person.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    onLoading = { _ -> Box(Modifier.fillMaxSize().shimmerEffect()) },
+                    onFailure = { _ ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = person.name.take(1),
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                            )
+                        }
                     }
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = person.name.take(1),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
                 }
-            )
+            }
         }
 
         Column(
@@ -117,7 +142,7 @@ private fun CastItem(
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp
                 ),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -128,7 +153,7 @@ private fun CastItem(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp
                     ),
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

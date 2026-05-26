@@ -4,14 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaItem
@@ -80,7 +77,7 @@ fun DetailHero(
                     )
                 }
 
-                // Stronger black gradient at the bottom
+                // Gradient overlay that blends hero image into the background
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -91,21 +88,21 @@ fun DetailHero(
                                 colors = listOf(
                                     Color.Transparent,
                                     Color.Black.copy(alpha = 0.5f),
-                                    Color.Black.copy(alpha = 0.8f),
-                                    Color.Black,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
+                                    MaterialTheme.colorScheme.background,
                                 ),
                             ),
                         ),
                 )
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = if (isTablet) 32.dp else 18.dp)
-                        .padding(bottom = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (media.logoUrl != null) {
+                if (media.logoUrl != null) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = if (isTablet) 32.dp else 18.dp)
+                            .padding(bottom = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -126,7 +123,7 @@ fun DetailHero(
                                         )
                                     )
                             )
-                            
+
                             KamelImage(
                                 resource = { asyncPainterResource(data = media.logoUrl!!) },
                                 contentDescription = media.title,
@@ -136,23 +133,6 @@ fun DetailHero(
                                 onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
                             )
                         }
-                    } else {
-                        Text(
-                            text = media.title,
-                            style = if (isTablet) MaterialTheme.typography.displaySmall else MaterialTheme.typography.displayLarge,
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-
-                    if (media.genres.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = media.genres.take(3).joinToString(" \u2022 "),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center,
-                        )
                     }
                 }
             }

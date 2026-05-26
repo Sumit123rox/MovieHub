@@ -36,6 +36,8 @@ multidex = "2.0.1"
 room3 = "3.0.0-alpha05"
 sqlite3 = "2.6.2"
 ksp = "2.3.7"
+mediarouter = "1.8.1"
+play-services-cast = "22.3.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -87,6 +89,9 @@ androidx-media3-session = { module = "androidx.media3:media3-session", version.r
 androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "androidx-media3" }
 androidx-media3-container = { module = "androidx.media3:media3-container", version.ref = "androidx-media3" }
 androidx-media3-extractor = { module = "androidx.media3:media3-extractor", version.ref = "androidx-media3" }
+androidx-media3-cast = { module = "androidx.media3:media3-cast", version.ref = "androidx-media3" }
+androidx-mediarouter = { module = "androidx.mediarouter:mediarouter", version.ref = "mediarouter" }
+play-services-cast-framework = { module = "com.google.android.gms:play-services-cast-framework", version.ref = "play-services-cast" }
 napier = { module = "io.github.aakira:napier", version.ref = "napier" }
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
@@ -103,6 +108,7 @@ quickjs-kt = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjsKt"
 ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 
 androidx-room3-runtime = { group = "androidx.room3", name = "room3-runtime", version.ref = "room3" }
 androidx-room3-compiler = { group = "androidx.room3", name = "room3-compiler", version.ref = "room3" }

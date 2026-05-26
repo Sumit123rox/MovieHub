@@ -21,6 +21,9 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.kermit)
         }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+        }
     }
 }
 

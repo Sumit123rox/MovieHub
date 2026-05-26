@@ -3,11 +3,14 @@ package com.moviehub.di
 import com.moviehub.core.database.MovieDatabase
 import com.moviehub.core.database.MovieDatabaseFactory
 import com.moviehub.core.database.ProfileRepository
+import com.moviehub.core.database.TmdbSettingsRepository
 import com.moviehub.core.network.AddonManager
 import com.moviehub.core.network.DownloadsRepository
 import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.scraper.PluginRepository
 import com.moviehub.core.network.scraper.ScraperManager
+import com.moviehub.core.network.tmdb.TmdbEnrichmentService
+import com.moviehub.core.network.tmdb.TmdbService
 import com.moviehub.feature.addon.data.AddonRepository
 import com.moviehub.feature.addon.data.AddonRepositoryImpl
 import com.moviehub.feature.addon.presentation.AddonViewModel
@@ -20,6 +23,7 @@ import com.moviehub.feature.details.data.DetailsRepositoryImpl
 import com.moviehub.feature.details.presentation.DetailsViewModel
 import com.moviehub.feature.home.data.HomeRepository
 import com.moviehub.feature.home.data.HomeRepositoryImpl
+import com.moviehub.feature.home.presentation.CatalogViewModel
 import com.moviehub.feature.home.presentation.HomeViewModel
 import com.moviehub.feature.profile.di.profileModule
 import com.moviehub.feature.search.data.SearchRepository
@@ -31,6 +35,8 @@ import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
@@ -49,6 +55,7 @@ val databaseModule = module {
     single { get<MovieDatabase>().downloadDao() }
     single { get<MovieDatabase>().addonDao() }
     single { ProfileRepository(get()) }
+    single { TmdbSettingsRepository(get(), get()) }
 }
 
 expect val platformModule: Module
@@ -77,9 +84,12 @@ val networkModule = module {
                 })
             }
             install(io.ktor.client.plugins.HttpTimeout) {
-                connectTimeoutMillis = 5000
-                requestTimeoutMillis = 8000
-                socketTimeoutMillis = 8000
+                connectTimeoutMillis = 10000
+                requestTimeoutMillis = 15000
+                socketTimeoutMillis = 15000
+            }
+            defaultRequest {
+                headers { append(io.ktor.http.HttpHeaders.UserAgent, "MovieHub/1.0") }
             }
         }
     }
@@ -87,16 +97,19 @@ val networkModule = module {
     single { ScraperManager(get()) }
     single { PluginRepository(get(), get(), get(), get()) }
     single { com.moviehub.core.network.YouTubePlaybackResolver(get()) }
+    single { TmdbService(get()) }
+    single { TmdbEnrichmentService(get()) }
 }
 
 val homeModule = module {
     single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
-    viewModel { HomeViewModel(get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
+    viewModel { CatalogViewModel(get(), get(), get()) }
 }
 
 val searchModule = module {
     single<SearchRepository> { SearchRepositoryImpl(get(), get()) }
-    viewModel { SearchViewModel(get()) }
+    viewModel { SearchViewModel(get(), get(), get()) }
 }
 
 val addonModule = module {
@@ -106,8 +119,8 @@ val addonModule = module {
 }
 
 val detailsModule = module {
-    single<DetailsRepository> { DetailsRepositoryImpl(get(), get(), get()) }
-    viewModel { DetailsViewModel(get(), get()) }
+    single<DetailsRepository> { DetailsRepositoryImpl(get(), get(), get(), get()) }
+    viewModel { DetailsViewModel(get(), get(), get(), get(), get(), get(), get()) }
 }
 
 val authModule = module {

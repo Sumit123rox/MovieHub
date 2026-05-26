@@ -2,7 +2,6 @@ package com.moviehub.core.ui.components
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +53,6 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private val logger = Logger.withTag("HeroCarousel")
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HeroCarousel(
     items: List<MediaItem>,
@@ -85,10 +83,11 @@ fun HeroCarousel(
     }
 
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val gradientStartY = with(androidx.compose.ui.platform.LocalDensity.current) { 180.dp.toPx() }
 
     Box(modifier = modifier.fillMaxWidth().height(650.dp)) {
         // 1. Background Plate (Blurred background that bleeds)
-        val currentItem = items[pagerState.currentPage % items.size]
+        val currentItem by remember { derivedStateOf { items[pagerState.currentPage % items.size] } }
 
         Box(modifier = Modifier.fillMaxSize()) {
             Crossfade(
@@ -99,7 +98,7 @@ fun HeroCarousel(
                 KamelImage(
                     resource = {
                         asyncPainterResource(
-                            data = item.backgroundUrl ?: item.posterUrl ?: ""
+                            data = item.posterUrl ?: item.backgroundUrl ?: ""
                         )
                     },
                     contentDescription = null,
@@ -181,7 +180,7 @@ fun HeroCarousel(
                                         Color.Transparent,
                                         Color.Black.copy(alpha = 0.5f)
                                     ),
-                                    startY = 400f
+                                    startY = gradientStartY
                                 )
                             )
                     )
@@ -234,7 +233,6 @@ fun HeroCarousel(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReactiveIndicator(
     pagerState: PagerState,

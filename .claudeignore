@@ -1,0 +1,38 @@
+# Build outputs
+**/build/
+.gradle/
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS files
+.DS_Store
+
+# Local config
+local.properties
+
+# Node
+node_modules/
+
+# AI metadata
+.claude/
+.junie/
+_bmad/
+
+# Docs
+docs/
+ARCHITECTURE.md
+project-context.md
+
+# Git
+.git/
+
+# Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.zip
+*.apk

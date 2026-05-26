@@ -1,14 +1,13 @@
 package com.moviehub.feature.sync
 
+import co.touchlab.kermit.Logger
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.AddonDao
 import com.moviehub.core.database.WatchHistoryDao
 import com.moviehub.core.model.Profile
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -18,14 +17,24 @@ class SyncManager(
     private val addonDao: AddonDao,
     private val watchHistoryDao: WatchHistoryDao
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
+        Logger.withTag("SyncManager").e(e) { "Unhandled coroutine exception" }
+    })
 
     init {
         scope.launch {
-            profileRepository.activeProfile.collectLatest { profile ->
-                if (profile != null) {
-                    syncProfileData(profile)
+            try {
+                profileRepository.activeProfile.collectLatest { profile ->
+                    if (profile != null) {
+                        try {
+                            syncProfileData(profile)
+                        } catch (e: Exception) {
+                            Logger.withTag("SyncManager").e(e) { "Error syncing profile data" }
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Logger.withTag("SyncManager").e(e) { "Failed to collect active profile" }
             }
         }
     }

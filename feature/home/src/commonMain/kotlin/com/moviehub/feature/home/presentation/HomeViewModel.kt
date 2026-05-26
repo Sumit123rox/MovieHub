@@ -2,6 +2,10 @@ package com.moviehub.feature.home.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.moviehub.core.database.ProfileRepository
+import com.moviehub.core.database.WatchHistoryDao
+import com.moviehub.core.database.WatchProgressDao
+import com.moviehub.core.model.ContinueWatchingItem
 import com.moviehub.feature.home.data.HomeRepository
 import com.moviehub.core.network.AddonManager
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -10,46 +14,132 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.flow.collectLatest
 
 class HomeViewModel(
     private val repository: HomeRepository,
-    private val addonManager: AddonManager
+    private val addonManager: AddonManager,
+    private val watchProgressDao: WatchProgressDao,
+    private val watchHistoryDao: WatchHistoryDao,
+    private val profileRepository: ProfileRepository
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
     private val _event = MutableSharedFlow<HomeEvent>()
     val event: SharedFlow<HomeEvent> = _event.asSharedFlow()
+
     init {
+        observeContinueWatching()
+        observeWatchedState()
         viewModelScope.launch {
-            var lastLoadedAddons: List<com.moviehub.core.model.StremioManifest>? = null
-            addonManager.installedAddons.collectLatest { addons ->
-                _state.value = _state.value.copy(installedAddons = addons)
-                
-                val isSame = lastLoadedAddons != null &&
-                        lastLoadedAddons!!.size == addons.size &&
-                        lastLoadedAddons!!.zip(addons).all { (a, b) -> a.id == b.id && a.version == b.version }
-                
-                if (isSame && _state.value.dynamicSections.isNotEmpty()) {
-                    return@collectLatest
+            try {
+                var lastLoadedAddons: List<com.moviehub.core.model.StremioManifest>? = null
+                addonManager.installedAddons.collectLatest { addons ->
+                    try {
+                        _state.value = _state.value.copy(installedAddons = addons)
+
+                        val isSame = lastLoadedAddons != null &&
+                                lastLoadedAddons!!.size == addons.size &&
+                                lastLoadedAddons!!.zip(addons).all { (a, b) -> a.id == b.id && a.version == b.version }
+
+                        if (isSame && _state.value.dynamicSections.isNotEmpty()) {
+                            return@collectLatest
+                        }
+
+                        lastLoadedAddons = addons
+
+                        if (addons.isNotEmpty()) {
+                            loadDynamicCatalogs(addons)
+                        } else {
+                            _state.value = _state.value.copy(
+                                dynamicSections = emptyList(),
+                                activeAddonId = null,
+                                activeAddonName = null
+                            )
+                        }
+                    } catch (e: Exception) {
+                        _state.value = _state.value.copy(error = "Error processing addons: ${e.message}")
+                    }
                 }
-                
-                lastLoadedAddons = addons
-                
-                if (addons.isNotEmpty()) {
-                    loadDynamicCatalogs(addons)
-                } else {
-                    _state.value = _state.value.copy(
-                        dynamicSections = emptyList(),
-                        activeAddonId = null,
-                        activeAddonName = null
-                    )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = "Failed to observe addons: ${e.message}")
+            }
+        }
+    }
+
+    private fun observeWatchedState() {
+        viewModelScope.launch {
+            try {
+                profileRepository.activeProfile.collectLatest { profile ->
+                    if (profile != null) {
+                        try {
+                            watchProgressDao.getWatchedMediaIds(profile.id).collectLatest { watchedIds ->
+                                _state.value = _state.value.copy(watchedMediaIds = watchedIds.toSet())
+                            }
+                        } catch (e: Exception) {
+                            _state.value = _state.value.copy(watchedMediaIds = emptySet())
+                        }
+                    } else {
+                        _state.value = _state.value.copy(watchedMediaIds = emptySet())
+                    }
                 }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(watchedMediaIds = emptySet())
+            }
+        }
+    }
+
+    private fun observeContinueWatching() {
+        viewModelScope.launch {
+            try {
+                profileRepository.activeProfile.collectLatest { profile ->
+                    if (profile != null) {
+                        try {
+                            watchProgressDao.getInProgress(profile.id, 20).collectLatest { progressList ->
+                                try {
+                                    if (progressList.isEmpty()) {
+                                        _state.value = _state.value.copy(continueWatching = emptyList())
+                                        return@collectLatest
+                                    }
+                                    val mediaIds = progressList.map { it.mediaId }
+                                    val historyMap = watchHistoryDao.getWatchHistoryBatch(mediaIds, profile.id)
+                                        .associateBy { it.mediaId }
+
+                                    _state.value = _state.value.copy(
+                                        continueWatching = progressList.mapNotNull { progress ->
+                                            val history = historyMap[progress.mediaId]
+                                            if (history != null && progress.durationMs > 0) {
+                                                ContinueWatchingItem(
+                                                    mediaId = progress.mediaId,
+                                                    title = history.title,
+                                                    type = progress.type,
+                                                    posterUrl = history.posterPath,
+                                                    progressMs = progress.progressMs,
+                                                    durationMs = progress.durationMs,
+                                                    lastWatchedAt = history.lastWatchedAt
+                                                )
+                                            } else null
+                                        }
+                                    )
+                                } catch (e: Exception) {
+                                    _state.value = _state.value.copy(continueWatching = emptyList())
+                                }
+                            }
+                        } catch (e: Exception) {
+                            _state.value = _state.value.copy(continueWatching = emptyList())
+                        }
+                    } else {
+                        _state.value = _state.value.copy(continueWatching = emptyList())
+                    }
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(continueWatching = emptyList())
             }
         }
     }

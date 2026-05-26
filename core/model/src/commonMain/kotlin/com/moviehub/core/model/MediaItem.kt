@@ -1,11 +1,16 @@
 package com.moviehub.core.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class MediaItem(
     val id: String,
     val title: String,
+    val imdbId: String? = null,
     val posterUrl: String?,
     val backgroundUrl: String? = null,
     val logoUrl: String? = null,
+    val tagline: String? = null,
     val description: String? = null,
     val type: MediaType,
     val rating: String? = null,
@@ -31,17 +36,21 @@ data class MediaItem(
     val collectionItems: List<MediaPreview> = emptyList()
 )
 
+@Immutable
 data class MediaPerson(
     val name: String,
     val role: String? = null,
-    val photo: String? = null
+    val photo: String? = null,
+    val tmdbId: Int? = null,
 )
 
+@Immutable
 data class MediaCompany(
     val name: String,
     val logo: String? = null
 )
 
+@Immutable
 data class MediaVideo(
     val id: String,
     val title: String,
@@ -52,6 +61,7 @@ data class MediaVideo(
     val overview: String? = null
 )
 
+@Immutable
 data class MediaTrailer(
     val id: String,
     val url: String,
@@ -59,6 +69,18 @@ data class MediaTrailer(
     val type: String? = null
 )
 
+@Immutable
+data class ContinueWatchingItem(
+    val mediaId: String,
+    val title: String,
+    val type: String,
+    val posterUrl: String?,
+    val progressMs: Long,
+    val durationMs: Long,
+    val lastWatchedAt: Long
+)
+
+@Immutable
 data class MediaPreview(
     val id: String,
     val title: String,

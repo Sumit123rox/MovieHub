@@ -54,7 +54,7 @@ fun DetailTrailersSection(
             Text(
                 text = "Trailers",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
@@ -65,7 +65,7 @@ fun DetailTrailersSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(trailers) { trailer ->
+            items(trailers, key = { it.id }) { trailer ->
                 TrailerItem(
                     trailer = trailer,
                     onClick = { onTrailerClick(trailer) }
@@ -126,7 +126,7 @@ private fun TrailerItem(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp
             ),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

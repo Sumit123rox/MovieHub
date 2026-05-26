@@ -34,38 +34,69 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaItem
+import com.moviehub.core.model.MediaType
 
 @Composable
 fun DetailMetaInfo(
     media: MediaItem,
     modifier: Modifier = Modifier,
 ) {
+    val releaseYear = media.releaseInfo?.take(4)
+    val runtimeText = formatRuntime(media.runtime)
+    val ageBadge = media.ageRating?.trim()?.takeIf { it.isNotBlank() }
+    val rating = media.rating
+
+    // Series summary: number of seasons & episodes
+    val seriesSummary = if (media.type == MediaType.SHOW) {
+        val seasons = media.videos.mapNotNull { it.season }.distinct().size
+        val episodes = media.videos.count { it.episode != null }
+        if (seasons > 0) {
+            if (episodes > 0) "${seasons} Season${if (seasons != 1) "s" else ""}, ${episodes} Episode${if (episodes != 1) "s" else ""}"
+            else "${seasons} Season${if (seasons != 1) "s" else ""}"
+        } else null
+    } else null
+
+    val hasMetaRow = releaseYear != null ||
+        runtimeText != null ||
+        ageBadge != null ||
+        rating != null ||
+        seriesSummary != null
+
+    val noData = !hasMetaRow &&
+        media.genres.isEmpty() &&
+        media.tagline.isNullOrBlank() &&
+        media.directors.isEmpty() &&
+        media.writers.isEmpty() &&
+        media.country.isNullOrBlank() &&
+        media.language.isNullOrBlank() &&
+        media.status.isNullOrBlank() &&
+        media.description.isNullOrBlank()
+    if (noData) return
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        val releaseYear = media.releaseInfo?.take(4)
-        val runtimeText = media.runtime
-        val ageBadge = media.ageRating?.trim()?.takeIf { it.isNotBlank() }
-        val rating = media.rating
-
-        val hasMetaRow = releaseYear != null ||
-            runtimeText != null ||
-            ageBadge != null ||
-            rating != null
 
         if (hasMetaRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                // Content type badge
+                if (media.type == MediaType.MOVIE) {
+                    DetailHeroMetaBadge(text = "Movie")
+                } else if (media.type == MediaType.SHOW) {
+                    DetailHeroMetaBadge(text = "TV Series")
+                }
+
                 releaseYear?.let { year ->
                     Text(
                         text = year,
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -73,7 +104,7 @@ fun DetailMetaInfo(
                     Text(
                         text = rt,
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -108,6 +139,14 @@ fun DetailMetaInfo(
                         )
                     }
                 }
+                seriesSummary?.let { summary ->
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
 
@@ -123,6 +162,18 @@ fun DetailMetaInfo(
                     DetailGenreBadge(text = genre)
                 }
             }
+        }
+
+        if (!media.tagline.isNullOrBlank()) {
+            Text(
+                text = "“${media.tagline}”",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    letterSpacing = 0.2.sp,
+                    lineHeight = 22.sp,
+                ),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            )
         }
 
         if (media.directors.isNotEmpty()) {
@@ -172,7 +223,7 @@ fun DetailMetaInfo(
                 Text(
                     text = media.description!!,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
                     maxLines = if (expanded) Int.MAX_VALUE else 3,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 22.sp,
@@ -187,7 +238,7 @@ fun DetailMetaInfo(
                     Text(
                         text = if (expanded) "Show Less" else "Show More",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { expanded = !expanded },
                     )
@@ -211,14 +262,14 @@ private fun MetaLabelValueRow(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.2.sp
             ),
-            color = Color.White.copy(alpha = 0.5f),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(
                 lineHeight = 20.sp
             ),
-            color = Color.White.copy(alpha = 0.9f),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
         )
     }
 }
@@ -226,16 +277,16 @@ private fun MetaLabelValueRow(
 @Composable
 private fun DetailHeroMetaBadge(
     text: String,
-    contentColor: Color = Color.White.copy(alpha = 0.7f),
+    contentColor: Color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
 ) {
     Box(
         modifier = Modifier
             .background(
-                color = Color.White.copy(alpha = 0.05f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
                 shape = RoundedCornerShape(8.dp)
             )
             .border(
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f)),
                 shape = RoundedCornerShape(8.dp),
             )
             .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -275,8 +326,31 @@ private fun DetailGenreBadge(text: String) {
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.25.sp
             ),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
         )
+    }
+}
+
+/**
+ * Formats a runtime string for display.
+ * Handles formats like "124 min", "2h", "1h 30m", or raw numbers.
+ */
+private fun formatRuntime(runtime: String?): String? {
+    if (runtime.isNullOrBlank()) return null
+    // Already looks formatted (contains "h" or "hr")
+    if (runtime.contains("h", ignoreCase = true) || runtime.contains("hr", ignoreCase = true)) {
+        return runtime
+    }
+    // Extract numeric portion
+    val minutes = runtime.filter { it.isDigit() }.toIntOrNull() ?: return runtime
+    if (minutes <= 0) return null
+
+    val hours = minutes / 60
+    val mins = minutes % 60
+    return when {
+        hours > 0 && mins > 0 -> "${hours}h ${mins}m"
+        hours > 0 -> "${hours}h"
+        else -> "${mins}m"
     }
 }
 

@@ -81,7 +81,7 @@ fun DetailSeriesContent(
             Text(
                 text = "Episodes",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -113,7 +113,7 @@ fun DetailSeriesContent(
                 Text(
                     text = "Episodes",
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -169,7 +169,7 @@ fun DetailSeriesContent(
                                 fontSize = sizing.seasonHeaderSize,
                                 fontWeight = FontWeight.SemiBold,
                             ),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                         )
                         if (hasSeasonPosters) {
                             SeasonViewModeToggle(
@@ -240,7 +240,7 @@ fun DetailSeriesContent(
                     Text(
                         text = sectionTitle,
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
@@ -278,7 +278,7 @@ private fun SeasonViewModeToggle(
             )
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = if (isPosters) 0.2f else 0.3f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (isPosters) 0.2f else 0.3f),
                 shape = RoundedCornerShape(8.dp),
             )
             .clickable(onClick = onClick)
@@ -294,7 +294,7 @@ private fun SeasonViewModeToggle(
             color = if (isPosters) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
-                Color.White
+                MaterialTheme.colorScheme.onBackground
             },
         )
     }
@@ -337,7 +337,7 @@ private fun SeasonTextChipScrollRow(
                         if (isSelected) {
                             MaterialTheme.colorScheme.primary
                         } else {
-                            Color.White.copy(alpha = 0.1f)
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f)
                         },
                     )
                     .clickable { onSelect(season) }
@@ -354,9 +354,9 @@ private fun SeasonTextChipScrollRow(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                     ),
                     color = if (isSelected) {
-                        Color.Black
+                        MaterialTheme.colorScheme.onPrimary
                     } else {
-                        Color.White
+                        MaterialTheme.colorScheme.onBackground
                     },
                 )
             }
@@ -435,7 +435,7 @@ private fun SeasonPosterButton(
                     color = if (isSelected) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        Color.White.copy(alpha = 0.1f)
+                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f)
                     },
                     shape = RoundedCornerShape(sizing.seasonPosterRadius),
                 ),
@@ -474,7 +474,7 @@ private fun SeasonPosterButton(
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
             ),
             color = if (isSelected) {
-                Color.White
+                MaterialTheme.colorScheme.onBackground
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
@@ -552,7 +552,7 @@ private fun EpisodeHorizontalCard(
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.12f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
                 shape = cardShape,
             )
             .combinedClickable(
@@ -581,7 +581,7 @@ private fun EpisodeHorizontalCard(
                         Text(
                             text = video.title.take(1),
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                         )
                     }
                 }

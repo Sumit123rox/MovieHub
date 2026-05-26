@@ -13,6 +13,8 @@ data class StreamItem(
     val sourceName: String? = null,
     val addonName: String? = null,
     val addonId: String? = null,
+    val drmLicenseUrl: String? = null,
+    val drmScheme: String? = null,
     val behaviorHints: StreamBehaviorHints = StreamBehaviorHints()
 ) {
     val isTorrentStream: Boolean

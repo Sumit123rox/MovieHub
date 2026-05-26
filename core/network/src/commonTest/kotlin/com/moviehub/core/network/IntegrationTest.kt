@@ -1,5 +1,6 @@
 package com.moviehub.core.network
 
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -8,7 +9,7 @@ class IntegrationTest {
 
     @Test
     fun testRealCinemetaCatalogFetch() = runTest {
-        val apiClient = StremioApiClient()
+        val apiClient = StremioApiClient(HttpClient())
         val result = runCatching {
             apiClient.getCatalog(
                 baseUrl = "https://v3-cinemeta.strem.io",

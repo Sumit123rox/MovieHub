@@ -1,6 +1,7 @@
 package com.moviehub.feature.profile.presentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -14,13 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.Profile
-import com.moviehub.core.ui.components.GlassyBox
+import com.moviehub.core.ui.components.ContentCard
 
 @Composable
 fun ProfileScreen(
@@ -40,14 +39,7 @@ fun ProfileScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F0F0F),
-                        Color.Black
-                    )
-                )
-            ),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -58,7 +50,7 @@ fun ProfileScreen(
                 text = "Who's Watching?",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onBackground,
                     letterSpacing = 1.sp
                 ),
                 modifier = Modifier.padding(bottom = 48.dp)
@@ -109,23 +101,27 @@ fun ProfileItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable { onClick() }
     ) {
-        GlassyBox(
+        Box(
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape)
+                .border(1.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), CircleShape)
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+            ContentCard(
+                modifier = Modifier.fillMaxSize()
             ) {
-                // For now, use initials if no avatar
-                Text(
-                    text = profile.name.take(1).uppercase(),
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = profile.name.take(1).uppercase(),
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
-                )
+                }
             }
         }
         
@@ -134,7 +130,7 @@ fun ProfileItem(
         Text(
             text = profile.name,
             style = MaterialTheme.typography.bodyLarge.copy(
-                color = Color.White.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                 fontWeight = FontWeight.Medium
             )
         )
@@ -153,23 +149,23 @@ fun AddProfileItem(
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f)),
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Add Profile",
-                tint = Color.White.copy(alpha = 0.6f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.size(48.dp)
             )
         }
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         Text(
             text = "Add Profile",
             style = MaterialTheme.typography.bodyLarge.copy(
-                color = Color.White.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         )
     }

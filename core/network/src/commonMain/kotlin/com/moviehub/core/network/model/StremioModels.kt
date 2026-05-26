@@ -50,6 +50,7 @@ data class StremioMeta(
     @SerialName("id") val id: String,
     @SerialName("type") val type: String,
     @SerialName("name") val name: String,
+    @SerialName("imdb_id") val imdbId: String? = null,
     @SerialName("poster") val poster: String? = null,
     @SerialName("background") val background: String? = null,
     @SerialName("logo") val logo: String? = null,

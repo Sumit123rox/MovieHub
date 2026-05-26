@@ -1,5 +1,6 @@
 package com.moviehub.feature.home.presentation
 
+import com.moviehub.core.model.ContinueWatchingItem
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.StremioManifest
 import com.moviehub.core.model.StremioCatalog
@@ -13,6 +14,8 @@ data class HomeState(
     val installedAddons: List<StremioManifest> = emptyList(),
     val dynamicSections: List<CatalogSection> = emptyList(),
     val featuredItems: List<MediaItem> = emptyList(),
+    val continueWatching: List<ContinueWatchingItem> = emptyList(),
+    val watchedMediaIds: Set<String> = emptySet(),
     val error: String? = null
 )
 

@@ -9,6 +9,7 @@ fun StremioMeta.toDomain(addonId: String? = null, addonUrl: String? = null): Med
     return MediaItem(
         id = id,
         title = name,
+        imdbId = imdbId ?: if (id.startsWith("tt")) id else null,
         posterUrl = poster,
         backgroundUrl = resolvedBackground,
         logoUrl = logo,
@@ -40,7 +41,7 @@ fun StremioMeta.toDomain(addonId: String? = null, addonUrl: String? = null): Med
                 overview = it.overview
             ) 
         },
-        trailers = trailers.map { MediaTrailer(it.source, it.source, it.type ?: "Trailer") }
+        trailers = trailers.map { MediaTrailer(id = it.source, url = it.source, type = it.type ?: "Trailer") }
     )
 }
 

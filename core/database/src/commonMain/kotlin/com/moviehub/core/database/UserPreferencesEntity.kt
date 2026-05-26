@@ -6,7 +6,9 @@ import androidx.room3.PrimaryKey
 @Entity(tableName = "user_preferences")
 data class UserPreferencesEntity(
     @PrimaryKey val profileId: String,
-    val theme: String = "dark",
+    val theme: String = "nuvio_dark",
+    val accentColor: String = "blue",
     val useAmoled: Boolean = true,
-    val language: String = "en"
+    val language: String = "en",
+    val tmdbApiKey: String = "",
 )

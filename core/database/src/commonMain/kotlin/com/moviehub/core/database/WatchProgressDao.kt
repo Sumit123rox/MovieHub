@@ -29,6 +29,12 @@ interface WatchProgressDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(progress: WatchProgress)
 
-    @Query("UPDATE watch_progress SET isWatched = 1 WHERE mediaId = :mediaId AND profileId = :profileId")
-    suspend fun markAsWatched(mediaId: String, profileId: String)
+    @Query("UPDATE watch_progress SET isWatched = 0 WHERE mediaId = :mediaId AND profileId = :profileId")
+    suspend fun markAsUnwatched(mediaId: String, profileId: String)
+
+    @Query("SELECT * FROM watch_progress WHERE profileId = :profileId AND isWatched = 0 AND progressMs > 0 ORDER BY progressMs DESC LIMIT :limit")
+    fun getInProgress(profileId: String, limit: Int = 20): Flow<List<WatchProgress>>
+
+    @Query("SELECT mediaId FROM watch_progress WHERE profileId = :profileId AND isWatched = 1")
+    fun getWatchedMediaIds(profileId: String): Flow<List<String>>
 }

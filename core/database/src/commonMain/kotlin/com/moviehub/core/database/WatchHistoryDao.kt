@@ -18,6 +18,9 @@ interface WatchHistoryDao {
     @Query("SELECT * FROM watch_history WHERE mediaId = :mediaId AND profileId = :profileId")
     fun getWatchHistoryFlow(mediaId: String, profileId: String): Flow<WatchHistoryEntity?>
 
+    @Query("SELECT * FROM watch_history WHERE mediaId IN (:mediaIds) AND profileId = :profileId")
+    suspend fun getWatchHistoryBatch(mediaIds: List<String>, profileId: String): List<WatchHistoryEntity>
+
     @Query("SELECT * FROM watch_history WHERE profileId = :profileId ORDER BY lastWatchedAt DESC LIMIT :limit")
     fun getRecentlyWatched(profileId: String, limit: Int = 10): Flow<List<WatchHistoryEntity>>
 

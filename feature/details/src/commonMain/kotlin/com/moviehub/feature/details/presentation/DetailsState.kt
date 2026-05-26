@@ -15,7 +15,12 @@ data class DetailsState(
     val mediaItem: MediaItem? = null,
     val streams: List<StreamItem> = emptyList(),
     val selectedTrailerSource: TrailerPlaybackSource? = null,
-    val error: String? = null
+    val isFavorite: Boolean = false,
+    val isWatched: Boolean = false,
+    val error: String? = null,
+    val streamsError: String? = null,
+    val isTmdbConfigured: Boolean = false,
+    val isEnrichingMetadata: Boolean = false,
 )
 
 sealed interface DetailsAction {
@@ -24,4 +29,7 @@ sealed interface DetailsAction {
     data class LoadTrailer(val videoId: String) : DetailsAction
     data object ClearTrailer : DetailsAction
     data class PlayStream(val stream: StreamItem) : DetailsAction
+    data object ToggleFavorite : DetailsAction
+    data object ToggleWatched : DetailsAction
+    data object RefreshLocalState : DetailsAction
 }

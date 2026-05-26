@@ -32,7 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.moviehub.core.ui.components.GlassyBox
+import com.moviehub.core.ui.components.ContentCard
 import com.moviehub.core.ui.components.TechnicalBadge
 import com.moviehub.core.ui.theme.MovieHubColors
 import kotlinx.coroutines.flow.collectLatest
@@ -125,7 +125,7 @@ fun AddonScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         item {
-                            GlassyBox(modifier = Modifier.fillMaxWidth()) {
+                            ContentCard(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
                                         text = stringResource(Res.string.install_addon),
@@ -204,7 +204,7 @@ fun AddonScreen(
                             }
                         } else {
                             items(addonState.installedAddons, key = { it.id }) { addon ->
-                                GlassyBox(modifier = Modifier.fillMaxWidth()) {
+                                ContentCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -272,7 +272,7 @@ fun AddonScreen(
                     ) {
                         // Global toggle
                         item {
-                            GlassyBox(modifier = Modifier.fillMaxWidth()) {
+                            ContentCard(modifier = Modifier.fillMaxWidth()) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -301,7 +301,7 @@ fun AddonScreen(
 
                         // Install Repository form
                         item {
-                            GlassyBox(modifier = Modifier.fillMaxWidth()) {
+                            ContentCard(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
                                         text = "Install Scraper Repository",
@@ -381,7 +381,7 @@ fun AddonScreen(
                             }
                         } else {
                             items(pluginsState.coreState.repositories, key = { it.manifestUrl }) { repo ->
-                                GlassyBox(modifier = Modifier.fillMaxWidth()) {
+                                ContentCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -464,7 +464,7 @@ fun AddonScreen(
                             }
                         } else {
                             items(pluginsState.coreState.scrapers, key = { it.id }) { scraper ->
-                                GlassyBox(modifier = Modifier.fillMaxWidth()) {
+                                ContentCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),

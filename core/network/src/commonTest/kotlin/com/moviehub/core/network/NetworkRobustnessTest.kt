@@ -21,14 +21,14 @@ class NetworkRobustnessTest {
 
         // Success Case
         val manifest = apiClient.getManifest("https://success.addon")
-        assertEquals("test.addon", manifest.id)
+        assertEquals("test.addon", manifest?.id)
 
-        // Malformed JSON should throw SerializationException (handled by repo try-catch)
-        val resultMalformed = runCatching { apiClient.getManifest("https://broken.addon") }
-        assertTrue(resultMalformed.isFailure)
+        // Malformed JSON should return null (handled by client try-catch)
+        val manifestMalformed = apiClient.getManifest("https://broken.addon")
+        assertTrue(manifestMalformed == null)
 
-        // 500 Error
-        val resultError = runCatching { apiClient.getManifest("https://error.addon") }
-        assertTrue(resultError.isFailure)
+        // 500 Error should return null (handled by client try-catch)
+        val manifestError = apiClient.getManifest("https://error.addon")
+        assertTrue(manifestError == null)
     }
 }

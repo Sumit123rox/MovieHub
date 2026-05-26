@@ -39,6 +39,9 @@ object StreamParser {
                     ?.objectValue("proxyHeaders")
                     ?.toProxyHeaders()
 
+                val drmScheme = obj.string("drmScheme") ?: hintsObj?.string("drmScheme")
+                val drmLicenseUrl = obj.string("drmLicenseUrl") ?: hintsObj?.string("drmLicenseUrl")
+
                 StreamItem(
                     name = obj.string("name"),
                     description = obj.string("description") ?: obj.string("title"),
@@ -46,6 +49,8 @@ object StreamParser {
                     infoHash = infoHash,
                     fileIdx = obj.int("fileIdx"),
                     externalUrl = externalUrl,
+                    drmLicenseUrl = drmLicenseUrl,
+                    drmScheme = drmScheme,
                     addonName = addonName,
                     addonId = addonId,
                     behaviorHints = StreamBehaviorHints(

@@ -23,6 +23,7 @@ kotlin {
             implementation(project(":core:ui"))
             implementation(project(":core:model"))
             implementation(project(":core:network"))
+            implementation(project(":core:database"))
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
@@ -30,6 +31,8 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
+            implementation(libs.compose.material.icons.core)
+            implementation(libs.compose.material.icons.extended)
         }
     }
 }

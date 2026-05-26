@@ -27,7 +27,9 @@ fun DetailsScreen(
     type: String,
     addonUrl: String? = null,
     onNavigateToStreams: (id: String, type: String, mediaId: String) -> Unit = { _, _, _ -> },
+    onNavigateToDetails: (id: String, type: String) -> Unit = { _, _ -> },
     onBackClick: () -> Unit = {},
+    onCastClick: ((com.moviehub.core.model.MediaPerson) -> Unit)? = null,
     viewModel: DetailsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -39,11 +41,17 @@ fun DetailsScreen(
         viewModel.onAction(DetailsAction.LoadDetails(id, type, addonUrl))
     }
 
+    // Intercept system back when trailer popup is showing — dismiss trailer instead of navigating away
+    PlatformBackHandler(enabled = selectedTrailer != null) {
+        selectedTrailer = null
+        viewModel.onAction(DetailsAction.ClearTrailer)
+    }
+
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black).animateContentSize()) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).animateContentSize()) {
             if (state.isLoading) {
                 Column(
                     modifier = Modifier
@@ -89,12 +97,11 @@ fun DetailsScreen(
                     }
                 }
             } else if (state.mediaItem != null) {
-                val media = state.mediaItem!!
-                
+                val media = state.mediaItem ?: return@Scaffold                
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = paddingValues.calculateBottomPadding() + 80.dp)
+                    contentPadding = PaddingValues(bottom = paddingValues.calculateBottomPadding() + 16.dp)
                 ) {
                     item {
                         Box {
@@ -127,39 +134,51 @@ fun DetailsScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             DetailActionButtons(
-                                onPlayClick = { 
+                                onPlayClick = {
                                     val streamId = if (media.type == MediaType.SHOW) {
                                         // Default to S1E1 if main play is clicked
                                         "${media.id}:1:1"
                                     } else media.id
                                     onNavigateToStreams(streamId, media.type.stremioType, media.id)
                                 },
-                                onSaveClick = { /* Handle Save */ }
+                                isSaved = state.isFavorite,
+                                onSaveClick = { viewModel.onAction(DetailsAction.ToggleFavorite) }
+                            )
+
+                            // Watched Toggle
+                            WatchedToggle(
+                                isWatched = state.isWatched,
+                                onToggle = { viewModel.onAction(DetailsAction.ToggleWatched) }
                             )
 
                             DetailMetaInfo(media = media)
                         }
                     }
 
-                    item {
-                        DetailCastSection(
-                            cast = media.cast,
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
+                    if (media.cast.isNotEmpty()) {
+                        item {
+                            DetailCastSection(
+                                cast = media.cast,
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                onCastClick = onCastClick,
+                            )
+                        }
                     }
 
-                    item {
-                        DetailTrailersSection(
-                            trailers = media.trailers,
-                            onTrailerClick = { trailer ->
-                                selectedTrailer = trailer
-                                viewModel.onAction(DetailsAction.LoadTrailer(trailer.url))
-                            },
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                    if (media.trailers.isNotEmpty()) {
+                        item {
+                            DetailTrailersSection(
+                                trailers = media.trailers,
+                                onTrailerClick = { trailer ->
+                                    selectedTrailer = trailer
+                                    viewModel.onAction(DetailsAction.LoadTrailer(trailer.url))
+                                },
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
                     }
 
-                    if (media.type == MediaType.SHOW) {
+                    if (media.type == MediaType.SHOW && media.videos.isNotEmpty()) {
                         item {
                             DetailSeriesContent(
                                 media = media,
@@ -171,29 +190,26 @@ fun DetailsScreen(
                         }
                     }
 
-                    item {
-                        DetailProductionSection(
-                            media = media,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                    if (media.productionCompanies.isNotEmpty() || media.networks.isNotEmpty()) {
+                        item {
+                            DetailProductionSection(
+                                media = media,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
                     }
 
-                    item {
-                        DetailAdditionalInfoSection(
-                            media = media,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
-
-                    item {
-                        DetailPosterRailSection(
-                            title = "More Like This",
-                            items = media.moreLikeThis,
-                            onPosterClick = { preview ->
-                                viewModel.onAction(DetailsAction.LoadDetails(preview.id, preview.type, null))
-                            },
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
+                    if (media.moreLikeThis.isNotEmpty()) {
+                        item {
+                            DetailPosterRailSection(
+                                title = "More Like This",
+                                items = media.moreLikeThis,
+                                onPosterClick = { preview ->
+                                    onNavigateToDetails(preview.id, preview.type)
+                                },
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            )
+                        }
                     }
 
                     if (media.collectionItems.isNotEmpty()) {
@@ -202,7 +218,7 @@ fun DetailsScreen(
                                 title = media.collectionName ?: "Collection",
                                 items = media.collectionItems,
                                 onPosterClick = { preview ->
-                                    viewModel.onAction(DetailsAction.LoadDetails(preview.id, preview.type, null))
+                                    onNavigateToDetails(preview.id, preview.type)
                                 },
                                 modifier = Modifier.padding(vertical = 16.dp)
                             )

@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,7 +74,7 @@ private fun DetailInfoRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
@@ -84,7 +83,7 @@ private fun DetailInfoRow(
                     .weight(1f)
                     .padding(start = 16.dp),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.End,
                 maxLines = 2,
@@ -97,7 +96,7 @@ private fun DetailInfoRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(Color.White.copy(alpha = 0.10f)),
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f)),
             )
         }
     }

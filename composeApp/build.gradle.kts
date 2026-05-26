@@ -34,8 +34,11 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":navigation"))
             implementation(project(":core:ui"))
+            implementation(project(":core:model"))
             implementation(project(":core:utils"))
+            implementation(project(":core:database"))
             implementation(project(":di"))
+            implementation(libs.koin.compose)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

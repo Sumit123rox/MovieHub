@@ -8,10 +8,14 @@ data class SearchState(
     val query: String = "",
     val isLoading: Boolean = false,
     val results: List<MediaItem> = emptyList(),
+    val recentSearches: List<String> = emptyList(),
     val error: String? = null
 )
 
 sealed interface SearchAction {
     data class QueryChanged(val query: String) : SearchAction
-    object PerformSearch : SearchAction
+    data object PerformSearch : SearchAction
+    data object ClearSearchHistory : SearchAction
+    data class RemoveSearch(val query: String) : SearchAction
+    data class SelectRecentSearch(val query: String) : SearchAction
 }

@@ -32,7 +32,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -47,9 +46,12 @@ import com.moviehub.feature.addon.presentation.AddonScreen
 import com.moviehub.feature.auth.presentation.AuthScreen
 import com.moviehub.feature.details.presentation.DetailsScreen
 import com.moviehub.feature.details.presentation.StreamsScreen
+import com.moviehub.feature.details.presentation.person.PersonDetailScreen
 import com.moviehub.feature.home.presentation.CatalogScreen
 import com.moviehub.feature.home.presentation.HomeScreen
 import com.moviehub.feature.player.presentation.PlayerScreen
+import com.moviehub.feature.profile.presentation.AppearanceScreen
+import com.moviehub.feature.profile.presentation.DownloadsScreen
 import com.moviehub.feature.profile.presentation.ProfileScreen
 import com.moviehub.feature.profile.presentation.ProfileViewModel
 import com.moviehub.feature.profile.presentation.SettingsScreen
@@ -57,6 +59,7 @@ import com.moviehub.feature.search.presentation.SearchScreen
 import com.moviehub.feature.sync.presentation.SyncScreen
 import org.koin.compose.koinInject
 import com.moviehub.core.database.ProfileRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -66,24 +69,29 @@ fun RootNavGraph() {
     val profileRepository: ProfileRepository = koinInject()
     val activeProfile by profileRepository.activeProfile.collectAsState()
 
-    // Redirect to Profile selection if there's no active profile
+    // Redirect to Profile selection if there's no active profile.
+    // Wrap in runCatching because NavHost may not have called setGraph() yet
+    // on the very first frame, triggering IllegalStateException. Retry with delay
+    // if the graph isn't ready yet.
     LaunchedEffect(activeProfile) {
         if (activeProfile == null) {
-            val currentRoute = navController.currentBackStackEntry?.destination?.route
-            if (currentRoute?.contains("Profile") != true) {
-                navController.navigate(Screen.Profile) {
-                    // Ensure Screen.Home is kept at the root of backstack
-                    popUpTo(Screen.Home) {
-                        inclusive = false
+            var attempts = 0
+            while (attempts < 10) {
+                val result = kotlin.runCatching {
+                    navController.navigate(Screen.Profile) {
+                        popUpTo(Screen.Home) { inclusive = false }
                     }
                 }
+                if (result.isSuccess) break
+                delay(100)
+                attempts++
             }
         }
     }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
@@ -104,7 +112,7 @@ fun RootNavGraph() {
                 exit = fadeOut(animationSpec = tween(300))
             ) {
                 NavigationBar(
-                    containerColor = Color.Black,
+                    containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.primary
                 ) {
                     val items = listOf(
@@ -123,20 +131,31 @@ fun RootNavGraph() {
                             label = { Text(item.label) },
                             selected = isSelected,
                             onClick = {
-                                navController.navigate(item.screen) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                                if (item.screen == Screen.Home) {
+                                    // For Home: just pop to start destination without save/restore
+                                    // to avoid recreating the Home backstack entry with stale state
+                                    navController.navigate(item.screen) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = false
+                                        }
+                                        launchSingleTop = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                } else {
+                                    navController.navigate(item.screen) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                                unselectedTextColor = Color.White.copy(alpha = 0.6f),
-                                indicatorColor = Color.White.copy(alpha = 0.1f)
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                             )
                         )
                     }
@@ -149,7 +168,7 @@ fun RootNavGraph() {
             startDestination = Screen.Home,
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(bottom = paddingValues.calculateBottomPadding()),
             enterTransition = { fadeIn(animationSpec = tween(300)) + slideInHorizontally(initialOffsetX = { it / 10 }) },
             exitTransition = { fadeOut(animationSpec = tween(300)) + slideOutHorizontally(targetOffsetX = { -it / 10 }) },
@@ -158,7 +177,7 @@ fun RootNavGraph() {
         ) {
             composable<Screen.Home> {
                 HomeScreen(
-                    onMediaClick = { id, type, addonUrl -> 
+                    onMediaClick = { id, type, addonUrl ->
                         navController.navigate(Screen.Details(id, type, addonUrl))
                     },
                     onAuthClick = {
@@ -172,6 +191,9 @@ fun RootNavGraph() {
                     },
                     onAddonsClick = {
                         navController.navigate(Screen.Addon)
+                    },
+                    onResumeClick = { mediaId, type ->
+                        navController.navigate(Screen.Streams(mediaId, type, mediaId))
                     }
                 )
             }
@@ -221,7 +243,23 @@ fun RootNavGraph() {
                     },
                     onNavigateToSync = {
                         navController.navigate(Screen.Sync)
+                    },
+                    onNavigateToAppearance = {
+                        navController.navigate(Screen.Appearance)
+                    },
+                    onNavigateToDownloads = {
+                        navController.navigate(Screen.Downloads)
                     }
+                )
+            }
+            composable<Screen.Appearance> {
+                AppearanceScreen(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+            composable<Screen.Downloads> {
+                DownloadsScreen(
+                    onBackClick = { navController.popBackStack() }
                 )
             }
             composable<Screen.Auth> {
@@ -230,13 +268,33 @@ fun RootNavGraph() {
             composable<Screen.Details> { backStackEntry ->
                 val details = backStackEntry.toRoute<Screen.Details>()
                 DetailsScreen(
-                    id = details.id, 
+                    id = details.id,
                     type = details.type,
                     addonUrl = details.addonUrl,
                     onNavigateToStreams = { id, type, mediaId ->
                         navController.navigate(Screen.Streams(id, type, mediaId))
                     },
-                    onBackClick = { navController.popBackStack() }
+                    onNavigateToDetails = { id, type ->
+                        navController.navigate(Screen.Details(id, type))
+                    },
+                    onBackClick = { navController.popBackStack() },
+                    onCastClick = { person ->
+                        val tmdbId = person.tmdbId
+                        if (tmdbId != null) {
+                            navController.navigate(Screen.PersonDetail(tmdbId, person.name))
+                        }
+                    }
+                )
+            }
+            composable<Screen.PersonDetail> { backStackEntry ->
+                val person = backStackEntry.toRoute<Screen.PersonDetail>()
+                PersonDetailScreen(
+                    personId = person.personId,
+                    personName = person.personName,
+                    onBackClick = { navController.popBackStack() },
+                    onMediaClick = { id, type ->
+                        navController.navigate(Screen.Details(id, type))
+                    }
                 )
             }
             composable<Screen.Streams> { backStackEntry ->
@@ -245,14 +303,15 @@ fun RootNavGraph() {
                     id = streams.id,
                     type = streams.type,
                     mediaId = streams.mediaId,
-                    onPlayClick = { stream, allStreams, title ->
+                    onPlayClick = { stream, allStreams, title, posterUrl ->
                         val launchId = PlayerLaunchStore.put(
                             PlayerLaunch(
                                 stream = stream,
                                 streams = allStreams,
                                 title = title,
                                 mediaId = streams.id,
-                                mediaType = streams.type
+                                mediaType = streams.type,
+                                posterUrl = posterUrl
                             )
                         )
                         navController.navigate(Screen.Player(launchId))
@@ -268,6 +327,9 @@ fun RootNavGraph() {
                         stream = launch.stream,
                         streams = launch.streams,
                         title = launch.title ?: "Playing...",
+                        mediaId = launch.mediaId,
+                        mediaType = launch.mediaType,
+                        posterUrl = launch.posterUrl,
                         onBackClick = { navController.popBackStack() }
                     )
                 } else {
