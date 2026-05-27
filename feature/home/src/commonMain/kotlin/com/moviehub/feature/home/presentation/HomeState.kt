@@ -3,14 +3,13 @@ package com.moviehub.feature.home.presentation
 import com.moviehub.core.model.ContinueWatchingItem
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.StremioManifest
-import com.moviehub.core.model.StremioCatalog
 import androidx.compose.runtime.Immutable
 
 @Immutable
 data class HomeState(
     val isLoading: Boolean = false,
-    val activeAddonId: String? = null,
-    val activeAddonName: String? = null,
+    val isLoadingMore: Boolean = false,
+    val hasMoreSections: Boolean = false,
     val installedAddons: List<StremioManifest> = emptyList(),
     val dynamicSections: List<CatalogSection> = emptyList(),
     val featuredItems: List<MediaItem> = emptyList(),
@@ -30,10 +29,8 @@ data class CatalogSection(
 )
 
 sealed interface HomeAction {
-    object Refresh : HomeAction
-    data class SelectAddon(val addonId: String) : HomeAction
-}
-
-sealed interface HomeEvent {
-    data class Error(val message: String) : HomeEvent
+    data object Refresh : HomeAction
+    data class MarkAsWatched(val mediaId: String) : HomeAction
+    data class RemoveFromContinue(val mediaId: String) : HomeAction
+    data object LoadMore : HomeAction
 }

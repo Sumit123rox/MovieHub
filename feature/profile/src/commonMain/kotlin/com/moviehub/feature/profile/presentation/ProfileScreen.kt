@@ -17,9 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.Profile
-import com.moviehub.core.ui.components.ContentCard
 
 @Composable
 fun ProfileScreen(
@@ -51,7 +49,6 @@ fun ProfileScreen(
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    letterSpacing = 1.sp
                 ),
                 modifier = Modifier.padding(bottom = 48.dp)
             )
@@ -106,27 +103,20 @@ fun ProfileItem(
                 .size(100.dp)
                 .clip(CircleShape)
                 .border(1.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
         ) {
-            ContentCard(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = profile.name.take(1).uppercase(),
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
-            }
+            Text(
+                text = profile.name.take(1).uppercase(),
+                style = MaterialTheme.typography.displaySmall.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+            )
         }
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         Text(
             text = profile.name,
             style = MaterialTheme.typography.bodyLarge.copy(
@@ -191,14 +181,13 @@ fun CreateProfileDialog(
                     label = { Text("Name") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                
+
                 if (canClone) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { cloneAddons = !cloneAddons }
                     ) {
-
                         Checkbox(
                             checked = cloneAddons,
                             onCheckedChange = { cloneAddons = it }

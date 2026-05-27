@@ -148,7 +148,7 @@ fun AppearanceScreen(
                                         fontSize = 11.sp
                                     ),
                                     color = if (isSelected) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                            else preview.onSurface.copy(alpha = 0.7f),
                                     maxLines = 1
                                 )
 
@@ -321,7 +321,7 @@ private fun savePreference(
                 profileId = profile.id,
                 theme = theme?.name?.lowercase() ?: prefs?.theme ?: "nuvio_dark",
                 accentColor = accent?.name?.lowercase() ?: prefs?.accentColor ?: "blue",
-                useAmoled = prefs?.useAmoled ?: true,
+                useAmoled = true,
                 language = prefs?.language ?: "en",
                 tmdbApiKey = prefs?.tmdbApiKey ?: "",
             )

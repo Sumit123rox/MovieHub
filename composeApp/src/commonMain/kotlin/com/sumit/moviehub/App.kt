@@ -21,8 +21,12 @@ import org.koin.compose.koinInject
 
 val movieHubKamelConfig = KamelConfig {
     takeFrom(KamelConfig.Default)
-    imageBitmapCacheSize = 500
-    imageVectorCacheSize = 100
+    imageBitmapCacheSize = 2000
+    imageVectorCacheSize = 500
+    // Increase HTTP response cache from default 10MB to 50MB for better offline image reuse
+    httpUrlFetcher {
+        httpCache(50L * 1024 * 1024)
+    }
 }
 
 @Composable

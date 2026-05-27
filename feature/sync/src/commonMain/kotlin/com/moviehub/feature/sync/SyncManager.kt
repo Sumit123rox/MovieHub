@@ -1,12 +1,13 @@
 package com.moviehub.feature.sync
 
 import co.touchlab.kermit.Logger
-import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.AddonDao
+import com.moviehub.core.database.CacheService
+import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.WatchHistoryDao
 import com.moviehub.core.model.Profile
+import com.moviehub.core.network.CatalogPrefetcher
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -15,13 +16,16 @@ class SyncManager(
     private val supabase: SupabaseClient,
     private val profileRepository: ProfileRepository,
     private val addonDao: AddonDao,
-    private val watchHistoryDao: WatchHistoryDao
+    private val watchHistoryDao: WatchHistoryDao,
+    private val cacheService: CacheService,
+    private val catalogPrefetcher: CatalogPrefetcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
         Logger.withTag("SyncManager").e(e) { "Unhandled coroutine exception" }
     })
 
     init {
+        // Profile data sync
         scope.launch {
             try {
                 profileRepository.activeProfile.collectLatest { profile ->
@@ -35,6 +39,33 @@ class SyncManager(
                 }
             } catch (e: Exception) {
                 Logger.withTag("SyncManager").e(e) { "Failed to collect active profile" }
+            }
+        }
+
+        // Periodic cache eviction (30s after startup, then every 15 minutes)
+        scope.launch {
+            delay(30_000L)
+            while (isActive) {
+                try {
+                    cacheService.evictExpired()
+                    cacheService.evictIfNeeded()
+                } catch (e: Exception) {
+                    Logger.withTag("SyncManager").e(e) { "Cache eviction failed" }
+                }
+                delay(15 * 60 * 1000L)
+            }
+        }
+
+        // Background catalog prefetch (5s after startup, then every 10 minutes)
+        scope.launch {
+            delay(5_000L)
+            while (isActive) {
+                try {
+                    catalogPrefetcher.prefetchFirstPage()
+                } catch (e: Exception) {
+                    Logger.withTag("SyncManager").e(e) { "Catalog prefetch failed" }
+                }
+                delay(10 * 60 * 1000L)
             }
         }
     }

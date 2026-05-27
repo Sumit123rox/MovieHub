@@ -6,7 +6,9 @@ import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.MediaPerson
 import com.moviehub.core.model.MediaPreview
 import com.moviehub.core.model.MediaType
+import com.moviehub.core.model.MediaVideo
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 
 /**
@@ -51,6 +53,14 @@ class TmdbEnrichmentService(
                 if (findResult != null) {
                     enriched = enrichWithTmdbId(enriched, findResult.id)
                 }
+            }
+        }
+
+        // Title-based search fallback when no ID could be resolved
+        if (enriched == media && media.title.isNotBlank()) {
+            val searchResult = searchByTitle(media)
+            if (searchResult != null) {
+                enriched = enrichWithTmdbId(enriched, searchResult.id)
             }
         }
 
@@ -283,6 +293,29 @@ class TmdbEnrichmentService(
             else -> null
         }
 
+        // Season/episode data for TV shows from TMDB (parallel fetch)
+        val enrichedVideos = if (media.videos.isEmpty() && details is TmdbTvDetails) {
+            val numSeasons = details.numberOfSeasons ?: 0
+            if (numSeasons > 0) {
+                val seasonDeferred = (1..numSeasons).map { seasonNum ->
+                    async { tmdbService.getSeasonDetails(tmdbId, seasonNum) }
+                }
+                seasonDeferred.awaitAll().flatMap { seasonDetail: TmdbSeasonDetails? ->
+                    seasonDetail?.episodes?.map { episode: TmdbEpisode ->
+                        MediaVideo(
+                            id = "tmdb:$tmdbId:${episode.seasonNumber}:${episode.episodeNumber}",
+                            title = episode.name ?: "Episode ${episode.episodeNumber}",
+                            released = episode.airDate,
+                            season = episode.seasonNumber,
+                            episode = episode.episodeNumber,
+                            thumbnail = TmdbImageUrl.still(episode.stillPath),
+                            overview = episode.overview,
+                        )
+                    } ?: emptyList<MediaVideo>()
+                }
+            } else emptyList()
+        } else media.videos
+
         // Cast photos + TMDB ID enrichment
         val enrichedCast = if (media.cast.isNotEmpty() && credits != null) {
             val tmdbCastMap = credits.cast
@@ -397,6 +430,22 @@ class TmdbEnrichmentService(
                 } ?: media.moreLikeThis
         } else media.moreLikeThis
 
+        // Backfill poster/background from TMDB when addon metadata lacks them
+        val enrichedPosterUrl = media.posterUrl ?: TmdbImageUrl.poster(
+            when (details) {
+                is TmdbMovieDetails -> details.posterPath
+                is TmdbTvDetails -> details.posterPath
+                else -> null
+            }
+        )
+        val enrichedBackgroundUrl = media.backgroundUrl ?: TmdbImageUrl.backdrop(
+            when (details) {
+                is TmdbMovieDetails -> details.backdropPath
+                is TmdbTvDetails -> details.backdropPath
+                else -> null
+            }
+        )
+
         media.copy(
             rating = rating,
             runtime = runtime,
@@ -411,8 +460,63 @@ class TmdbEnrichmentService(
             status = enrichedStatus,
             tagline = tagline,
             description = enrichedDescription,
+            videos = enrichedVideos,
             moreLikeThis = moreLikeThis,
+            posterUrl = enrichedPosterUrl,
+            backgroundUrl = enrichedBackgroundUrl,
         )
+    }
+
+    private suspend fun searchByTitle(media: MediaItem): TmdbFindResult? {
+        val title = media.title.trim()
+        val year = media.releaseInfo?.take(4)
+        val mediaType = TmdbService.normalizeMediaType(media.type.stremioType)
+
+        // Build multiple search queries in priority order
+        val queries = buildList {
+            // 1. Title + year (most specific)
+            if (year != null) add("$title $year")
+            // 2. Title only
+            add(title)
+            // 3. Remove parenthetical content — "(English dub)", "(2005)", etc.
+            val cleaned = title.replace(Regex("\\s*\\([^)]*\\)\\s*"), "").trim()
+            if (cleaned != title && cleaned.isNotBlank()) {
+                if (year != null) add("$cleaned $year")
+                add(cleaned)
+            }
+            // 4. First part before any separator — "Movie: Subtitle" → "Movie"
+            val firstPart = title.split(Regex("[:\\-–—|]")).firstOrNull()?.trim()
+            if (firstPart != null && firstPart != title && firstPart.isNotBlank()) {
+                if (year != null) add("$firstPart $year")
+                add(firstPart)
+            }
+        }.distinct()
+
+        for (query in queries) {
+            val response = tmdbService.searchMulti(query) ?: continue
+            val result = response.results.firstOrNull { result ->
+                val matchesType = when (mediaType) {
+                    "movie" -> result.mediaType == "movie"
+                    "tv" -> result.mediaType == "tv"
+                    else -> true
+                }
+                if (!matchesType) return@firstOrNull false
+                // Year check: prefer exact year match when available
+                if (year != null) {
+                    val resultYear = if (mediaType == "movie") result.releaseDate?.take(4) else result.firstAirDate?.take(4)
+                    resultYear == null || resultYear == year
+                } else true
+            }
+            if (result != null) {
+                return TmdbFindResult(
+                    id = result.id,
+                    title = result.title ?: result.name,
+                    name = result.name ?: result.title,
+                    mediaType = mediaType,
+                )
+            }
+        }
+        return null
     }
 
     private fun resolveTmdbId(media: MediaItem): Int? {

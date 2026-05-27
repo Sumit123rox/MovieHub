@@ -1,8 +1,11 @@
 package com.moviehub.feature.details.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +26,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +39,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TheaterComedy
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -42,6 +48,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,6 +59,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,7 +96,8 @@ fun StreamDiscoveryIndicator(processed: Int, total: Int) {
     GlassyBox(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 4.dp)
+            .padding(bottom = 4.dp),
+        blurRadius = 8.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -99,7 +111,7 @@ fun StreamDiscoveryIndicator(processed: Int, total: Int) {
                 Text(
                     text = "Searching Addons",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -108,19 +120,20 @@ fun StreamDiscoveryIndicator(processed: Int, total: Int) {
                 progress = { if (total > 0) processed.toFloat() / total else 0f },
                 modifier = Modifier.fillMaxWidth().height(4.dp),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.White.copy(alpha = 0.15f),
+                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Searching $processed of $total addons...",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreamsScreen(
     id: String,
@@ -135,6 +148,41 @@ fun StreamsScreen(
     val profileRepository: com.moviehub.core.database.ProfileRepository = koinInject()
     val scope = rememberCoroutineScope()
     var activeTorrentStream by remember { mutableStateOf<StreamItem?>(null) }
+    var noPlayableSource by remember { mutableStateOf<StreamItem?>(null) }
+    var selectedProvider by rememberSaveable { mutableStateOf<String?>(null) }
+    // Available providers derived from streams (null = "All")
+    val providers = remember(state.streams) {
+        val names = state.streams.mapNotNull { it.addonName?.takeIf { n -> n.isNotBlank() } }.distinct().sorted()
+        listOf(null as String?) + names
+    }
+    // Filtered streams based on selected provider
+    val displayStreams = remember(selectedProvider, state.streams) {
+        if (selectedProvider == null) state.streams
+        else state.streams.filter { it.addonName == selectedProvider }
+    }
+
+    val listState = rememberLazyListState()
+    var isHeaderVisible by remember { mutableStateOf(true) }
+
+    LaunchedEffect(listState) {
+        var lastIndex = 0
+        var lastOffset = 0
+        while (isActive) {
+            val index = listState.firstVisibleItemIndex
+            val offset = listState.firstVisibleItemScrollOffset
+            val scrolledEnough = index > 0 || offset > 64
+            val scrollingDown = index > lastIndex || (index == lastIndex && offset > lastOffset)
+            val scrollingUp = index < lastIndex || (index == lastIndex && offset < lastOffset)
+            if (scrollingDown && isHeaderVisible && scrolledEnough) {
+                isHeaderVisible = false
+            } else if (scrollingUp && !isHeaderVisible) {
+                isHeaderVisible = true
+            }
+            lastIndex = index
+            lastOffset = offset
+            delay(100)
+        }
+    }
 
     LaunchedEffect(id, type, mediaId) {
         viewModel.onAction(DetailsAction.LoadDetails(mediaId ?: id, type, null))
@@ -151,49 +199,10 @@ fun StreamsScreen(
         val hasBackdrop = backdropUrl != null
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // ===== FULLSCREEN BACKDROP =====
-            if (hasBackdrop) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .align(Alignment.TopCenter)
-                ) {
-                    KamelImage(
-                        resource = { asyncPainterResource(data = backdropUrl) },
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
-                    )
-                    // Deep gradient — dark at edges, very transparent center
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.Black.copy(alpha = 0.7f),
-                                        Color.Black.copy(alpha = 0.25f),
-                                        Color.Black.copy(alpha = 0.3f),
-                                        Color.Black.copy(alpha = 0.7f),
-                                    )
-                                )
-                            )
-                    )
-                    // Additional radial gradient to keep edges dark while center is visible
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color.Black.copy(alpha = 0.35f),
-                                        Color.Black.copy(alpha = 0.7f),
-                                    )
-                                )
-                            )
-                    )
+            // ===== FULLSCREEN BACKDROP (keyed on URL to avoid unnecessary recomposition) =====
+            key(backdropUrl) {
+                if (hasBackdrop) {
+                    StreamsBackdrop(backdropUrl = backdropUrl)
                 }
             }
 
@@ -202,41 +211,48 @@ fun StreamsScreen(
                     .fillMaxSize()
                     .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
             ) {
-                // ===== HEADER =====
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // ===== HEADER (hides on scroll-down, shows on scroll-up) =====
+                AnimatedVisibility(
+                    visible = isHeaderVisible,
+                    modifier = Modifier.fillMaxWidth(),
+                    enter = slideInVertically(initialOffsetY = { h -> -h }) + fadeIn(animationSpec = tween(200)),
+                    exit = slideOutVertically(targetOffsetY = { h -> -h }) + fadeOut(animationSpec = tween(200))
                 ) {
-                    IconButton(
-                        onClick = onBackClick,
-                        modifier = Modifier.background(
-                            Color.Black.copy(alpha = 0.4f),
-                            CircleShape
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Choose Stream",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        state.mediaItem?.title?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.65f),
-                                maxLines = 1
+                        IconButton(
+                            onClick = onBackClick,
+                            modifier = Modifier.background(
+                                Color.Black.copy(alpha = 0.4f),
+                                CircleShape
                             )
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Choose Stream",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            state.mediaItem?.title?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
@@ -266,7 +282,18 @@ fun StreamsScreen(
                         }
                     }
                 } else {
+                    // Pinned provider filter bar (stays on screen while scrolling)
+                    if (displayStreams.isNotEmpty() || state.streams.isNotEmpty()) {
+                        ProviderFilterBar(
+                            providers = providers,
+                            selectedProvider = selectedProvider,
+                            onProviderSelected = { selectedProvider = it },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = 12.dp,
@@ -285,14 +312,18 @@ fun StreamsScreen(
                             }
                         }
 
-                        items(state.streams, key = { it.url ?: it.infoHash ?: it.name ?: "" }) { stream ->
+                        // Provider filter bar — horizontal scrollable chips (removed from LazyColumn, pinned above)
+
+                        items(displayStreams, key = { "${it.addonName ?: ""}_${it.url ?: it.infoHash ?: it.name ?: it.hashCode()}" }) { stream ->
                             StreamItemCard(
                                 stream = stream,
                                 onClick = {
                                     if (stream.isTorrentStream) {
                                         activeTorrentStream = stream
+                                    } else if (stream.hasPlayableSource) {
+                                        onPlayClick(stream, displayStreams, state.mediaItem?.title, state.mediaItem?.posterUrl)
                                     } else {
-                                        onPlayClick(stream, state.streams, state.mediaItem?.title, state.mediaItem?.posterUrl)
+                                        noPlayableSource = stream
                                     }
                                 },
                                 onDownloadClick = if (stream.url != null || stream.externalUrl != null) { {
@@ -358,7 +389,83 @@ fun StreamsScreen(
                     onDismiss = { activeTorrentStream = null }
                 )
             }
+
+            noPlayableSource?.let { unplayable ->
+                AlertDialog(
+                    onDismissRequest = { noPlayableSource = null },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(24.dp),
+                    title = {
+                        Text(
+                            text = "No Playable Source",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "This stream has no direct playable URL. Try another source or copy the link for external playback.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { noPlayableSource = null },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("OK", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun StreamsBackdrop(backdropUrl: String) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        KamelImage(
+            resource = { asyncPainterResource(data = backdropUrl) },
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) },
+            onFailure = { Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))) }
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.7f),
+                            Color.Black.copy(alpha = 0.25f),
+                            Color.Black.copy(alpha = 0.3f),
+                            Color.Black.copy(alpha = 0.7f),
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.35f),
+                            Color.Black.copy(alpha = 0.7f),
+                        )
+                    )
+                )
+        )
     }
 }
 
@@ -368,10 +475,18 @@ fun StreamItemCard(
     onClick: () -> Unit,
     onDownloadClick: (() -> Unit)? = null
 ) {
+    val flagEmoji = remember(stream) { getFlagEmoji(stream.name ?: stream.description) }
+    val technicalSpecs = remember(stream) { extractTechnicalSpecs(stream.description) }
+    val videoSizeBytes = remember(stream.behaviorHints.videoSize) { stream.behaviorHints.videoSize }
+    val addonName = remember(stream.addonName) { stream.addonName }
+    val streamDescription = remember(stream.description) { stream.description }
+
     GlassyBox(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        baseAlpha = 0.55f,
+        blurRadius = 8.dp
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -385,7 +500,7 @@ fun StreamItemCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = getFlagEmoji(stream.name ?: stream.description),
+                    text = flagEmoji,
                     fontSize = 22.sp
                 )
             }
@@ -403,11 +518,11 @@ fun StreamItemCard(
                         text = stream.name ?: "Unknown Source",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     // File size badge
-                    stream.behaviorHints.videoSize?.let { size ->
+                    videoSizeBytes?.let { size ->
                         if (size > 0) {
                             Text(
                                 text = formatBytes(size),
@@ -428,7 +543,7 @@ fun StreamItemCard(
                 }
 
                 // Addon name
-                stream.addonName?.let {
+                addonName?.let {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = it,
@@ -441,24 +556,23 @@ fun StreamItemCard(
 
                 // Technical badges row
                 Spacer(modifier = Modifier.height(6.dp))
-                val specs = extractTechnicalSpecs(stream.description)
-                if (specs.isNotEmpty()) {
+                if (technicalSpecs.isNotEmpty()) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(5.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        specs.forEach { spec ->
+                        technicalSpecs.forEach { spec ->
                             TechnicalBadge(spec)
                         }
                     }
                 }
 
                 // Description / filename shown if no specs extracted
-                if (specs.isEmpty() && !stream.description.isNullOrBlank()) {
+                if (technicalSpecs.isEmpty() && !streamDescription.isNullOrBlank()) {
                     Text(
-                        text = stream.description ?: "",
+                        text = streamDescription ?: "",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.45f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -784,5 +898,53 @@ fun formatBytes(bytes: Long?): String {
         gb >= 1.0 -> "${(gb * 10.0).toInt() / 10.0} GB"
         mb >= 1.0 -> "${(mb * 10.0).toInt() / 10.0} MB"
         else -> "$bytes B"
+    }
+}
+
+@Composable
+private fun ProviderFilterBar(
+    providers: List<String?>,
+    selectedProvider: String?,
+    onProviderSelected: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.Black.copy(alpha = 0.35f),
+    ) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            items(providers, key = { it ?: "all" }) { provider ->
+                val isSelected = provider == selectedProvider
+                val label = provider ?: "All"
+                Surface(
+                    onClick = { onProviderSelected(provider) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isSelected)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        Color.White.copy(alpha = 0.18f),
+                    contentColor = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimary
+                    else
+                        Color.White.copy(alpha = 0.85f),
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }

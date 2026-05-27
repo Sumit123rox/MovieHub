@@ -5,14 +5,17 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 
 class TmdbService(
     private val httpClient: HttpClient,
+    private val networkDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val logger = Logger.withTag("TmdbService")
     private val json = Json { ignoreUnknownKeys = true }
@@ -147,6 +150,16 @@ class TmdbService(
         return fetch("$mediaType/$tmdbId/external_ids")
     }
 
+    // ============ SEARCH ============
+
+    suspend fun searchMulti(query: String, language: String = "en", page: Int = 1): TmdbSearchResponse? {
+        requireKey()
+        return fetch("search/multi") {
+            parameter("query", query)
+            parameter("page", page)
+        }
+    }
+
     // ============ PRIVATE HELPERS ============
 
     private suspend inline fun <reified T> fetch(
@@ -155,16 +168,18 @@ class TmdbService(
     ): T? {
         val key = apiKeyMutex.withLock { apiKey }
         val url = "https://api.themoviedb.org/3/$endpoint"
-        return try {
-            httpClient.get(url) {
-                parameter("api_key", key)
-                block()
-            }.let { response ->
-                json.decodeFromString<T>(response.bodyAsText())
+        return withContext(networkDispatcher) {
+            try {
+                httpClient.get(url) {
+                    parameter("api_key", key)
+                    block()
+                }.let { response ->
+                    json.decodeFromString<T>(response.bodyAsText())
+                }
+            } catch (e: Exception) {
+                logger.w { "TMDB API error for $endpoint: ${e.message}" }
+                null
             }
-        } catch (e: Exception) {
-            logger.w { "TMDB API error for $endpoint: ${e.message}" }
-            null
         }
     }
 

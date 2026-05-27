@@ -53,6 +53,9 @@ fun MovieHubTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = MovieHubTypography(),
-        content = content
+        content = {
+            SetStatusBarStyle(theme.isDark)
+            content()
+        }
     )
 }

@@ -48,6 +48,9 @@ import platform.AVFoundation.accessLog
 import platform.UIKit.UIScreen
 import com.moviehub.core.model.SubtitleStyle
 import com.moviehub.core.model.VideoScale
+import platform.AVFoundation.canUseNetworkResourcesForLiveStreamingWhilePaused
+import platform.AVFoundation.preferredForwardBufferDuration
+import platform.AVFoundation.preferredPeakBitRate
 
 private val iosPlayerLogger = Logger.withTag("VideoPlayer.iOS")
 
@@ -85,6 +88,7 @@ actual fun VideoPlayer(
             val playerItem = AVPlayerItem(asset = asset)
             // Adaptive buffer config for smoother playback
             playerItem.preferredForwardBufferDuration = 30.0
+            playerItem.preferredPeakBitRate = 5_000_000f
             playerItem.automaticallyWaitsToMinimizeStalling = true
             playerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = true
             AVPlayer(playerItem = playerItem)

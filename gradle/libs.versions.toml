@@ -26,6 +26,7 @@ material-icon = "1.7.3"
 androidx-media3 = "1.10.1"
 napier = "2.7.1"
 supabase = "3.6.0"
+okhttp = "5.3.2"
 quickjsKt = "1.0.5"
 ksoup = "0.2.6"
 reorderable = "3.1.0"
@@ -66,10 +67,12 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+ktor-client-encoding = { module = "io.ktor:ktor-client-encoding", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 kamel-image = { module = "media.kamel:kamel-image", version.ref = "kamel" }
 kamel-image-default = { module = "media.kamel:kamel-image-default", version.ref = "kamel" }
 kamel-decoder-image-bitmap = { module = "media.kamel:kamel-decoder-image-bitmap", version.ref = "kamel" }

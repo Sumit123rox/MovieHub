@@ -160,14 +160,14 @@ fun WatchedToggle(
                 imageVector = if (isWatched) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = if (isWatched) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                tint = if (isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = if (isWatched) "Watched" else "Mark as Watched",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
-                color = if (isWatched) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                color = if (isWatched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

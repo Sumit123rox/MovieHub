@@ -55,6 +55,48 @@ class ScraperManager(
     }
 
     /**
+     * Returns a snapshot of all currently registered scrapers.
+     */
+    fun getRegisteredScrapers(): List<JsPluginScraper> = synchronized(lock) {
+        jsPluginScrapers.toList()
+    }
+
+    /**
+     * Run a single scraper by ID and return its results.
+     */
+    suspend fun getStreamsFromScraper(
+        scraperId: String,
+        imdbId: String,
+        type: String,
+        season: Int? = null,
+        episode: Int? = null,
+    ): List<StreamItem> {
+        val normalizedType = normalizeMediaType(type)
+        val plugin = synchronized(lock) {
+            jsPluginScrapers.firstOrNull { it.id == scraperId }
+        } ?: return emptyList()
+
+        if (!plugin.supportsType(normalizedType)) return emptyList()
+
+        return try {
+            log.d { "Running JS plugin: ${plugin.name}" }
+            val results = PluginRuntime.executePlugin(
+                httpClient = httpClient,
+                code = plugin.code,
+                tmdbId = imdbId,
+                mediaType = normalizedType,
+                season = season,
+                episode = episode,
+                scraperId = plugin.id,
+            )
+            results.map { it.toStreamItem(plugin.name, plugin.id) }
+        } catch (e: Exception) {
+            log.e(e) { "JS plugin ${plugin.name} failed" }
+            emptyList()
+        }
+    }
+
+    /**
      * Query all enabled scrapers concurrently for direct-play streams.
      *
      * @param imdbId The IMDb ID (e.g., "tt33265765").
@@ -110,7 +152,7 @@ class ScraperManager(
     /**
      * Convert a JS plugin result into a standard StreamItem.
      */
-    private fun PluginRuntimeResult.toStreamItem(pluginName: String, pluginId: String): StreamItem {
+    fun PluginRuntimeResult.toStreamItem(pluginName: String, pluginId: String): StreamItem {
         return StreamItem(
             name = title,
             description = buildString {
@@ -133,9 +175,9 @@ class ScraperManager(
     }
 
     /**
-     * Internal model for a registered JS plugin scraper.
+     * Model for a registered JS plugin scraper.
      */
-    private data class JsPluginScraper(
+    data class JsPluginScraper(
         val id: String,
         val name: String,
         val code: String,

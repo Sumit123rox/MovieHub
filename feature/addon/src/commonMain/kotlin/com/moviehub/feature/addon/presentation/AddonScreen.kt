@@ -1,6 +1,9 @@
 package com.moviehub.feature.addon.presentation
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,13 +27,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.ui.components.ContentCard
 import com.moviehub.core.ui.components.TechnicalBadge
@@ -53,6 +60,7 @@ fun AddonScreen(
     val addonState by addonViewModel.state.collectAsState()
     val pluginsState by pluginsViewModel.state.collectAsState()
     val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
     var selectedTab by rememberSaveable { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -204,7 +212,19 @@ fun AddonScreen(
                             }
                         } else {
                             items(addonState.installedAddons, key = { it.id }) { addon ->
-                                ContentCard(modifier = Modifier.fillMaxWidth()) {
+                                val addonUrl = addonState.addonUrls[addon.id]
+                                ContentCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClick = { },
+                                            onLongClick = {
+                                                addonUrl?.let { url ->
+                                                    clipboardManager.setText(AnnotatedString(url))
+                                                }
+                                            }
+                                        )
+                                ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -217,11 +237,24 @@ fun AddonScreen(
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
+                                                var descExpanded by remember { mutableStateOf(false) }
+                                                val descMaxLines = if (descExpanded) Int.MAX_VALUE else 2
                                                 Text(
                                                     text = addon.description ?: "",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = descMaxLines,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
+                                                if ((addon.description?.length ?: 0) > 100) {
+                                                    Text(
+                                                        text = if (descExpanded) "Show less" else "Show more",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.clickable { descExpanded = !descExpanded }
+                                                    )
+                                                }
                                             }
                                             Row {
                                                 if (addon.behaviorHints.configurable) {
@@ -381,7 +414,16 @@ fun AddonScreen(
                             }
                         } else {
                             items(pluginsState.coreState.repositories, key = { it.manifestUrl }) { repo ->
-                                ContentCard(modifier = Modifier.fillMaxWidth()) {
+                                ContentCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClick = { },
+                                            onLongClick = {
+                                                clipboardManager.setText(AnnotatedString(repo.manifestUrl))
+                                            }
+                                        )
+                                ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),

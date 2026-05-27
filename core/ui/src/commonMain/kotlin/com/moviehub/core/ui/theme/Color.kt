@@ -125,11 +125,11 @@ object Accents {
 
 // ===== THEME TYPES (5 options) =====
 enum class ThemeType(val label: String) {
-    DARK("Dark"),
-    AMOLED_DARK("AMOLED Dark"),
     LIGHT("Light"),
     NUVIO_DARK("Nuvio Dark"),
-    OCEAN_DARK("Ocean Dark")
+    AMOLED_DARK("AMOLED Dark"),
+    SEPIA("Sepia"),
+    MOCHA("Mocha")
 }
 
 data class ThemePalette(
@@ -143,16 +143,6 @@ data class ThemePalette(
 )
 
 object Themes {
-    val Dark = ThemePalette(
-        background = Color(0xFF121212),
-        surface = Color(0xFF1E1E1E),
-        surfaceVariant = Color(0xFF2C2C2C),
-        onBackground = Color.White,
-        onSurface = Color.White,
-        onSurfaceVariant = Color(0xFFD1D1D1),
-        isDark = true,
-    )
-
     val AmoledDark = ThemePalette(
         background = Color.Black,
         surface = Color.Black,
@@ -183,22 +173,32 @@ object Themes {
         isDark = true,
     )
 
-    val OceanDark = ThemePalette(
-        background = Color(0xFF0D1117),
-        surface = Color(0xFF161B22),
-        surfaceVariant = Color(0xFF21262D),
-        onBackground = Color.White,
-        onSurface = Color.White,
-        onSurfaceVariant = Color(0xFFB0B0B0),
+    val Sepia = ThemePalette(
+        background = Color(0xFF1C1612),
+        surface = Color(0xFF26201C),
+        surfaceVariant = Color(0xFF302A26),
+        onBackground = Color(0xFFE8DDD3),
+        onSurface = Color(0xFFE8DDD3),
+        onSurfaceVariant = Color(0xFFC4B8AC),
+        isDark = true,
+    )
+
+    val Mocha = ThemePalette(
+        background = Color(0xFF131016),
+        surface = Color(0xFF1D1A1E),
+        surfaceVariant = Color(0xFF272428),
+        onBackground = Color(0xFFE6E0E8),
+        onSurface = Color(0xFFE6E0E8),
+        onSurfaceVariant = Color(0xFFC2BCC8),
         isDark = true,
     )
 
     fun fromType(type: ThemeType): ThemePalette = when (type) {
-        ThemeType.DARK -> Dark
         ThemeType.AMOLED_DARK -> AmoledDark
         ThemeType.LIGHT -> Light
         ThemeType.NUVIO_DARK -> NuvioDark
-        ThemeType.OCEAN_DARK -> OceanDark
+        ThemeType.SEPIA -> Sepia
+        ThemeType.MOCHA -> Mocha
     }
 }
 

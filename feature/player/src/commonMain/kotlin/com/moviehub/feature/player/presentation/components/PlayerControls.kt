@@ -63,6 +63,8 @@ fun PlayerControls(
     progress: Float,
     duration: Long,
     currentTime: Long,
+    seekIncrement: Int = 10,
+    onSeekIndicatorChange: ((String) -> Unit)? = null,
     onSpeedChange: (Float) -> Unit = {},
     onAudioTrackChange: (Int, Int) -> Unit = { _, _ -> },
     onSubtitleTrackChange: (Int, Int) -> Unit = { _, _ -> },
@@ -281,6 +283,108 @@ fun PlayerControls(
                     }
                 }
 
+                // ===== CENTER PLAYBACK CONTROLS =====
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Center),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (onPreviousEpisode != null) {
+                            IconButton(
+                                onClick = onPreviousEpisode!!,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Color.White.copy(alpha = 0.06f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SkipPrevious,
+                                    contentDescription = "Previous Episode",
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                        }
+
+                        IconButton(
+                            onClick = {
+                                val seekMs = seekIncrement * 1000L
+                                onSeek(((currentTime - seekMs).coerceAtLeast(0L).toFloat() / safeDuration).coerceIn(0f, 1f))
+                                onSeekIndicatorChange?.invoke("-${seekIncrement}s")
+                            },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color.White.copy(alpha = 0.06f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Replay10,
+                                contentDescription = "Rewind 10s",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(36.dp))
+
+                        IconButton(
+                            onClick = onPlayPauseToggle,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(accentPrimary, CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(36.dp))
+
+                        IconButton(
+                            onClick = {
+                                val seekMs = seekIncrement * 1000L
+                                onSeek(((currentTime + seekMs).coerceAtMost(duration).toFloat() / safeDuration).coerceIn(0f, 1f))
+                                onSeekIndicatorChange?.invoke("+${seekIncrement}s")
+                            },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color.White.copy(alpha = 0.06f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Forward10,
+                                contentDescription = "Forward 10s",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        if (onNextEpisode != null) {
+                            Spacer(modifier = Modifier.width(16.dp))
+                            IconButton(
+                                onClick = onNextEpisode!!,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Color.White.copy(alpha = 0.06f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SkipNext,
+                                    contentDescription = "Next Episode",
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // ===== BOTTOM CONTROLS =====
                 Box(
                     modifier = Modifier
@@ -385,93 +489,6 @@ fun PlayerControls(
                                 color = Color.White.copy(alpha = 0.7f),
                                 modifier = Modifier.width(42.dp)
                             )
-                        }
-
-                        // ===== PLAYBACK CONTROLS ROW =====
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (onPreviousEpisode != null) {
-                                IconButton(
-                                    onClick = onPreviousEpisode!!,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(Color.White.copy(alpha = 0.06f), CircleShape)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SkipPrevious,
-                                        contentDescription = "Previous Episode",
-                                        tint = Color.White.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                            }
-
-                            IconButton(
-                                onClick = { onSeek(((currentTime - 10000L).coerceAtLeast(0L).toFloat() / safeDuration).coerceIn(0f, 1f)) },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color.White.copy(alpha = 0.06f), CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Replay10,
-                                    contentDescription = "Rewind 10s",
-                                    tint = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(36.dp))
-
-                            IconButton(
-                                onClick = onPlayPauseToggle,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .background(accentPrimary, CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause" else "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(36.dp))
-
-                            IconButton(
-                                onClick = { onSeek(((currentTime + 10000L).coerceAtMost(duration).toFloat() / safeDuration).coerceIn(0f, 1f)) },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color.White.copy(alpha = 0.06f), CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Forward10,
-                                    contentDescription = "Forward 10s",
-                                    tint = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            if (onNextEpisode != null) {
-                                Spacer(modifier = Modifier.width(16.dp))
-                                IconButton(
-                                    onClick = onNextEpisode!!,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(Color.White.copy(alpha = 0.06f), CircleShape)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SkipNext,
-                                        contentDescription = "Next Episode",
-                                        tint = Color.White.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
                         }
 
                         // ===== SETTINGS PILLS =====

@@ -1,5 +1,6 @@
 package com.moviehub.di
 
+import com.moviehub.core.database.CacheService
 import com.moviehub.core.database.MovieDatabase
 import com.moviehub.core.database.MovieDatabaseFactory
 import com.moviehub.core.database.ProfileRepository
@@ -34,14 +35,21 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+
+val appJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    coerceInputValues = true
+}
 
 val databaseModule = module {
     single { MovieDatabaseFactory(get()).create() }
@@ -56,6 +64,7 @@ val databaseModule = module {
     single { get<MovieDatabase>().addonDao() }
     single { ProfileRepository(get()) }
     single { TmdbSettingsRepository(get(), get()) }
+    single { CacheService(get(), appJson) }
 }
 
 expect val platformModule: Module
@@ -72,7 +81,9 @@ val networkModule = module {
     }
     single { AddonManager(get(), get()) }
     single { DownloadsRepository(get(), get(), get()) }
-    single { SyncManager(get(), get(), get(), get()) }
+    single { SyncManager(get(), get(), get(), get(), get(), get()) }
+    single { com.moviehub.core.network.NetworkDispatchers() }
+    single { com.moviehub.core.network.CatalogPrefetcher(get(), get(), get(), get(), appJson) }
 
     single {
         HttpClient {
@@ -83,9 +94,18 @@ val networkModule = module {
                     coerceInputValues = true
                 })
             }
+            install(HttpRequestRetry) {
+                retryOnServerErrors(maxRetries = 2)
+                retryOnException(maxRetries = 3, retryOnTimeout = true)
+                exponentialDelay(base = 500.0, maxDelayMs = 8000L)
+            }
+            install(ContentEncoding) {
+                gzip()
+                deflate()
+            }
             install(io.ktor.client.plugins.HttpTimeout) {
-                connectTimeoutMillis = 10000
-                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 8000
+                requestTimeoutMillis = 20000
                 socketTimeoutMillis = 15000
             }
             defaultRequest {
@@ -93,7 +113,7 @@ val networkModule = module {
             }
         }
     }
-    single { StremioApiClient(get()) }
+    single { StremioApiClient(get(), get()) }
     single { ScraperManager(get()) }
     single { PluginRepository(get(), get(), get(), get()) }
     single { com.moviehub.core.network.YouTubePlaybackResolver(get()) }
@@ -102,7 +122,7 @@ val networkModule = module {
 }
 
 val homeModule = module {
-    single<HomeRepository> { HomeRepositoryImpl(get(), get()) }
+    single<HomeRepository> { HomeRepositoryImpl(get(), get(), get(), appJson) }
     viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
     viewModel { CatalogViewModel(get(), get(), get()) }
 }
@@ -119,7 +139,7 @@ val addonModule = module {
 }
 
 val detailsModule = module {
-    single<DetailsRepository> { DetailsRepositoryImpl(get(), get(), get(), get()) }
+    single<DetailsRepository> { DetailsRepositoryImpl(get(), get(), get(), get(), get(), appJson) }
     viewModel { DetailsViewModel(get(), get(), get(), get(), get(), get(), get()) }
 }
 

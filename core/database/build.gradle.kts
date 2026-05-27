@@ -29,6 +29,7 @@ kotlin {
             implementation(project(":core:utils"))
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.datetime)
             implementation(libs.androidx.room3.runtime)
             implementation(libs.androidx.sqlite3.bundled)
         }

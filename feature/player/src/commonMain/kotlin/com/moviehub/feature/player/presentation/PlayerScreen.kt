@@ -2,6 +2,7 @@ package com.moviehub.feature.player.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.database.ProfileRepository
+import com.moviehub.core.database.UserPreferencesDao
 import com.moviehub.core.database.WatchHistoryDao
 import com.moviehub.core.database.WatchHistoryEntity
 import com.moviehub.core.database.WatchProgress
@@ -54,6 +56,7 @@ import androidx.compose.animation.fadeOut
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 @Composable
@@ -105,12 +108,18 @@ fun PlayerScreen(
     var requestedAction by remember { mutableStateOf<PlayerAction?>(null) }
     var isControlsVisible by remember { mutableStateOf(true) }
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
-    var showLoading by remember { mutableStateOf(false) }
+    var showLoading by remember { mutableStateOf(true) }
     var hasSavedHistory by remember { mutableStateOf(false) }
     var hasStartedPlaying by remember { mutableStateOf(false) }
     var hasResumed by remember { mutableStateOf(false) }
-    var volume by remember { mutableStateOf(1f) }
-    var brightness by remember { mutableStateOf(1f) }
+    var currentAudioGroupIndex by remember { mutableStateOf(-2) }
+    var currentAudioTrackIndex by remember { mutableStateOf(-2) }
+    var currentSubtitleGroupIndex by remember { mutableStateOf(-2) }
+    var currentSubtitleTrackIndex by remember { mutableStateOf(-2) }
+    val initialVolume = rememberSystemVolume()
+    val initialBrightness = rememberSystemBrightness()
+    var volume by remember { mutableStateOf(initialVolume) }
+    var brightness by remember { mutableStateOf(initialBrightness) }
     var transientVolume by remember { mutableStateOf<Float?>(null) }
     var transientBrightness by remember { mutableStateOf<Float?>(null) }
     var isScreenLocked by remember { mutableStateOf(false) }
@@ -129,6 +138,12 @@ fun PlayerScreen(
     val watchProgressDao: WatchProgressDao = koinInject()
     val watchHistoryDao: WatchHistoryDao = koinInject()
     val profileRepository: ProfileRepository = koinInject()
+    val userPreferencesDao: UserPreferencesDao = koinInject()
+
+    var seekIncrement by remember { mutableStateOf(10) }
+    var seekIndicatorText by remember { mutableStateOf<String?>(null) }
+    var interactionTick by remember { mutableStateOf(0) }
+    var lastSeekTimeMs by remember { mutableStateOf(-1L) }
 
     val streamUrl = activeStream.url ?: activeStream.externalUrl ?: ""
     val headers = activeStream.behaviorHints.proxyHeaders?.request ?: emptyMap()
@@ -191,15 +206,47 @@ fun PlayerScreen(
     // Intercept system back button — delegate to navigation popBackStack
     PlayerBackHandler(enabled = true, onBack = onBackClick)
 
-    // Auto-resume to last saved position on load
+    // Load seek increment from user preferences
+    LaunchedEffect(mediaId) {
+        val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
+        val prefs = userPreferencesDao.getPreference(profileId)
+        seekIncrement = prefs?.seekIncrement ?: 10
+    }
+
+    // Auto-resume to last saved position and track preferences on load
     LaunchedEffect(mediaId) {
         val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
         val videoId = mediaId ?: return@LaunchedEffect
         val progress = watchProgressDao.getProgress(videoId, profileId).firstOrNull()
-        if (progress != null && progress.progressMs > 5_000 && !progress.isWatched) {
-            delay(500) // Wait for player to initialize
-            requestedAction = PlayerAction.SeekTo(progress.progressMs)
-            hasResumed = true
+        if (progress != null && !progress.isWatched) {
+            // Restore playback position (if > 5 seconds)
+            if (progress.progressMs > 5_000) {
+                delay(500) // Wait for player to initialize
+                requestedAction = PlayerAction.SeekTo(progress.progressMs)
+                hasResumed = true
+            }
+            // Wait for audio tracks to actually be loaded (player prepare is async)
+            while (playbackState.audioTracks.isEmpty() && isActive) {
+                delay(100)
+            }
+            // Restore audio track preference (user explicitly selected a track)
+            if (progress.audioGroupIndex >= 0 && playbackState.audioTracks.isNotEmpty()) {
+                delay(300) // Small buffer after tracks detected
+                requestedAction = PlayerAction.SelectAudioTrack(progress.audioGroupIndex, progress.audioTrackIndex)
+                currentAudioGroupIndex = progress.audioGroupIndex
+                currentAudioTrackIndex = progress.audioTrackIndex
+            }
+            // Wait for subtitle tracks to be available
+            while (playbackState.subtitleTracks.isEmpty() && isActive) {
+                delay(100)
+            }
+            // Restore subtitle track preference (user explicitly enabled/disabled)
+            if (progress.subtitleGroupIndex != -2 && playbackState.subtitleTracks.isNotEmpty()) {
+                delay(300)
+                requestedAction = PlayerAction.SelectSubtitleTrack(progress.subtitleGroupIndex, progress.subtitleTrackIndex)
+                currentSubtitleGroupIndex = progress.subtitleGroupIndex
+                currentSubtitleTrackIndex = progress.subtitleTrackIndex
+            }
         }
     }
 
@@ -207,7 +254,12 @@ fun PlayerScreen(
     LaunchedEffect(streamUrl) {
         val savedPos = pendingStreamSwitchPosition
         if (savedPos > 0) {
-            delay(1500) // Wait for new stream to initialize
+            // Wait for new stream to start playing before seeking
+            val pollDelays = listOf(500L, 500L, 1000L, 1000L)
+            for (waitMs in pollDelays) {
+                delay(waitMs)
+                if (playbackState.isPlaying) break
+            }
             requestedAction = PlayerAction.SeekTo(savedPos)
             pendingStreamSwitchPosition = -1
         }
@@ -220,33 +272,72 @@ fun PlayerScreen(
             hasStartedPlaying = true
             val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
             val videoId = mediaId ?: return@LaunchedEffect
-            watchHistoryDao.insertWatchHistory(
-                WatchHistoryEntity(
-                    mediaId = videoId,
-                    profileId = profileId,
-                    title = title,
-                    type = mediaType ?: "movie",
-                    posterPath = posterUrl,
-                )
+            watchHistoryDao.conditionalUpsertWatchHistory(
+                mediaId = videoId,
+                profileId = profileId,
+                title = title,
+                type = mediaType ?: "movie",
+                posterPath = posterUrl,
             )
         }
     }
 
-    // Persist progress every 15 seconds while playing
-    LaunchedEffect(playbackState.isPlaying) {
-        if (playbackState.isPlaying && playbackState.currentPositionMs > 0) {
+    // Persist progress every 15 seconds while playing (repeating, not one-shot)
+    val periodicSaveScope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        while (isActive) {
             delay(15000)
-            val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-            val videoId = mediaId ?: return@LaunchedEffect
-            watchProgressDao.insertOrUpdate(
-                WatchProgress(
-                    mediaId = videoId,
-                    profileId = profileId,
-                    type = mediaType ?: "movie",
-                    progressMs = playbackState.currentPositionMs,
-                    durationMs = playbackState.durationMs,
-                )
-            )
+            if (playbackState.isPlaying && playbackState.currentPositionMs > 0) {
+                try {
+                    val profileId = profileRepository.activeProfile.value?.id ?: continue
+                    val videoId = mediaId ?: continue
+                    watchProgressDao.insertOrUpdate(
+                        WatchProgress(
+                            mediaId = videoId,
+                            profileId = profileId,
+                            type = mediaType ?: "movie",
+                            progressMs = playbackState.currentPositionMs,
+                            durationMs = playbackState.durationMs,
+                            audioGroupIndex = currentAudioGroupIndex,
+                            audioTrackIndex = currentAudioTrackIndex,
+                            subtitleGroupIndex = currentSubtitleGroupIndex,
+                            subtitleTrackIndex = currentSubtitleTrackIndex,
+                        )
+                    )
+                } catch (_: Exception) {
+                    // Best-effort save — DB or lifecycle may be unavailable
+                }
+            }
+        }
+    }
+
+    // Save current position when user navigates away from PlayerScreen
+    // Wrapped in try-catch to prevent crash if DB is already closed during activity teardown
+    DisposableEffect(Unit) {
+        onDispose {
+            if (hasStartedPlaying && playbackState.currentPositionMs > 0) {
+                periodicSaveScope.launch {
+                    try {
+                        val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                        val videoId = mediaId ?: return@launch
+                        watchProgressDao.insertOrUpdate(
+                            WatchProgress(
+                                mediaId = videoId,
+                                profileId = profileId,
+                                type = mediaType ?: "movie",
+                                progressMs = playbackState.currentPositionMs,
+                                durationMs = playbackState.durationMs,
+                                audioGroupIndex = currentAudioGroupIndex,
+                                audioTrackIndex = currentAudioTrackIndex,
+                                subtitleGroupIndex = currentSubtitleGroupIndex,
+                                subtitleTrackIndex = currentSubtitleTrackIndex,
+                            )
+                        )
+                    } catch (_: Exception) {
+                        // DB may be closed during activity teardown — best-effort save
+                    }
+                }
+            }
         }
     }
 
@@ -256,40 +347,56 @@ fun PlayerScreen(
             playbackState.currentPositionMs >= playbackState.durationMs * 0.9 &&
             playbackState.currentPositionMs > 0
         if (reachedEnd) {
-            val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-            val videoId = mediaId ?: return@LaunchedEffect
-            watchProgressDao.insertOrUpdate(
-                WatchProgress(
-                    mediaId = videoId,
-                    profileId = profileId,
-                    type = mediaType ?: "movie",
-                    progressMs = playbackState.currentPositionMs,
-                    durationMs = playbackState.durationMs,
-                    isWatched = true
+            try {
+                val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
+                val videoId = mediaId ?: return@LaunchedEffect
+                watchProgressDao.insertOrUpdate(
+                    WatchProgress(
+                        mediaId = videoId,
+                        profileId = profileId,
+                        type = mediaType ?: "movie",
+                        progressMs = playbackState.currentPositionMs,
+                        durationMs = playbackState.durationMs,
+                        isWatched = true,
+                        audioGroupIndex = currentAudioGroupIndex,
+                        audioTrackIndex = currentAudioTrackIndex,
+                        subtitleGroupIndex = currentSubtitleGroupIndex,
+                        subtitleTrackIndex = currentSubtitleTrackIndex,
+                    )
                 )
-            )
+            } catch (_: Exception) {
+                // Best-effort
+            }
         }
     }
 
     // Save progress on pause (only after playback has actually started)
     LaunchedEffect(playbackState.isPlaying) {
         if (!playbackState.isPlaying && hasStartedPlaying && playbackState.currentPositionMs > 0) {
-            val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-            val videoId = mediaId ?: return@LaunchedEffect
-            watchProgressDao.insertOrUpdate(
-                WatchProgress(
-                    mediaId = videoId,
-                    profileId = profileId,
-                    type = mediaType ?: "movie",
-                    progressMs = playbackState.currentPositionMs,
-                    durationMs = playbackState.durationMs,
+            try {
+                val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
+                val videoId = mediaId ?: return@LaunchedEffect
+                watchProgressDao.insertOrUpdate(
+                    WatchProgress(
+                        mediaId = videoId,
+                        profileId = profileId,
+                        type = mediaType ?: "movie",
+                        progressMs = playbackState.currentPositionMs,
+                        durationMs = playbackState.durationMs,
+                        audioGroupIndex = currentAudioGroupIndex,
+                        audioTrackIndex = currentAudioTrackIndex,
+                        subtitleGroupIndex = currentSubtitleGroupIndex,
+                        subtitleTrackIndex = currentSubtitleTrackIndex,
+                    )
                 )
-            )
+            } catch (_: Exception) {
+                // Best-effort save on pause
+            }
         }
     }
 
-    // Auto-hide controls
-    LaunchedEffect(isControlsVisible, playbackState.isPlaying, isSettingsSheetOpen) {
+    // Auto-hide controls (resets on user interaction via interactionTick)
+    LaunchedEffect(isControlsVisible, playbackState.isPlaying, isSettingsSheetOpen, interactionTick) {
         if (isControlsVisible && playbackState.isPlaying && !isSettingsSheetOpen) {
             delay(3000)
             isControlsVisible = false
@@ -301,6 +408,14 @@ fun PlayerScreen(
         if (feedbackMessage != null) {
             delay(2000)
             feedbackMessage = null
+        }
+    }
+
+    // Auto-clear seek indicator after 800ms
+    LaunchedEffect(seekIndicatorText) {
+        if (seekIndicatorText != null) {
+            delay(800)
+            seekIndicatorText = null
         }
     }
 
@@ -348,20 +463,25 @@ fun PlayerScreen(
     // Immediately hide loading overlay when playback actually starts
     LaunchedEffect(playbackState.isPlaying) {
         if (playbackState.isPlaying) {
-            delay(100)
-            showLoading = false
+            val recentSeek = (playerTimeMillis() - lastSeekTimeMs) < 2000
+            if (recentSeek) {
+                showLoading = false // No delay for post-seek resume
+            } else {
+                delay(100)
+                showLoading = false
+            }
         }
     }
 
-    // Loading debounce: only show during initial load (not rebuffering once playback started)
+    // Loading state: show during initial load AND during post-seek rebuffering.
+    // Only dismiss loading when playback has actually started or an error occurred.
+    // Prevents the initial isLoading=false from immediately hiding the overlay.
     LaunchedEffect(playbackState.isLoading) {
-        if (playbackState.isLoading && !hasStartedPlaying) {
-            delay(400)
+        val recentSeek = (playerTimeMillis() - lastSeekTimeMs) < 2000
+        if (playbackState.isLoading && (!hasStartedPlaying || recentSeek)) {
+            if (hasStartedPlaying) delay(400) // Debounce for seek rebuffer only
             showLoading = true
-        } else {
-            if (showLoading) {
-                delay(600)
-            }
+        } else if (hasStartedPlaying || playbackState.error != null) {
             showLoading = false
         }
     }
@@ -374,7 +494,10 @@ fun PlayerScreen(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                if (!isScreenLocked) isControlsVisible = !isControlsVisible
+                if (!isScreenLocked) {
+                    isControlsVisible = !isControlsVisible
+                    interactionTick++
+                }
             },
         contentAlignment = Alignment.Center
     ) {
@@ -398,7 +521,7 @@ fun PlayerScreen(
                     onActionConsumed = { requestedAction = null },
                     brightness = brightness,
                     videoScale = videoScale,
-                    subtitleBottomMargin = if (isControlsVisible) 60 else 0,
+                    subtitleBottomMargin = if (isControlsVisible) 110 else 0,
                     subtitleStyle = subtitleStyle,
                     drmLicenseUrl = activeStream.drmLicenseUrl,
                     drmScheme = activeStream.drmScheme,
@@ -419,68 +542,71 @@ fun PlayerScreen(
                 )
             }
 
-            // Screen lock indicator
+            // Screen lock indicator + double-tap to unlock gesture
             if (isScreenLocked) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
                             tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                         Text(
                             text = "Screen Locked",
                             color = Color.White.copy(alpha = 0.8f),
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "Double-tap to unlock",
+                            color = Color.White.copy(alpha = 0.45f),
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
                 }
-            }
-
-            // Loading overlay with debounce to prevent flicker
-            if (showLoading && playbackState.error == null) {
+                // Gesture layer over full screen for unlock
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 4.dp,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = { isScreenLocked = false }
+                            )
+                        }
+                )
             }
 
             // Gesture & tap overlay — captures touches that native video views swallow
             // Left/right edges: vertical drag for brightness/volume; center: tap to toggle controls
             // Pinch: free zoom
-            if (!showLoading && playbackState.error == null && !isScreenLocked) {
+            if (playbackState.error == null && !isScreenLocked) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(Unit) {
                             detectTransformGestures { _, pan, zoom, _ ->
                                 if (zoom != 1f) {
+                                    // Zoom symmetrically from center (like YouTube)
                                     freeZoomScale = (freeZoomScale * zoom).coerceIn(1f, 5f)
                                 }
-                                if (freeZoomScale > 1f) {
-                                    val maxPan = 200f * (freeZoomScale - 1f)
+                                if (freeZoomScale > 1f && pan != Offset.Zero) {
+                                    val maxPanX = (freeZoomScale - 1f) * size.width / 2f
+                                    val maxPanY = (freeZoomScale - 1f) * size.height / 2f
                                     freeZoomOffset = Offset(
-                                        x = (freeZoomOffset.x + pan.x).coerceIn(-maxPan, maxPan),
-                                        y = (freeZoomOffset.y + pan.y).coerceIn(-maxPan, maxPan)
+                                        x = (freeZoomOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
+                                        y = (freeZoomOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
                                     )
+                                } else if (freeZoomScale <= 1f) {
+                                    freeZoomOffset = Offset.Zero
                                 }
                             }
                         }
@@ -501,11 +627,13 @@ fun PlayerScreen(
                                         val sens = h * 0.5f
                                         when {
                                             x < w * 0.25f -> {
-                                                brightness = (brightness - dragAmount / sens).coerceIn(0f, 1f)
+                                                val raw = if (brightness < 0f) 1f else brightness
+                                                brightness = (raw - dragAmount / sens).coerceIn(0f, 1f)
                                                 transientBrightness = brightness
                                             }
                                             x > w * 0.75f -> {
-                                                volume = (volume - dragAmount / sens).coerceIn(0f, 1f)
+                                                val raw = if (volume < 0f) 1f else volume
+                                                volume = (raw - dragAmount / sens).coerceIn(0f, 1f)
                                                 transientVolume = volume
                                                 requestedAction = PlayerAction.SetVolume(volume)
                                             }
@@ -514,21 +642,47 @@ fun PlayerScreen(
                                 }
                             )
                         }
-                        .pointerInput(Unit) {
+                        .pointerInput(playbackState.currentPositionMs, playbackState.durationMs) {
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val seekMs = (dragAmount * 10).toLong() // ~10s per full screen swipe
+                                    if (kotlin.math.abs(seekMs) > 200) {
+                                        lastSeekTimeMs = playerTimeMillis()
+                                        requestedAction = PlayerAction.SeekTo(
+                                            (playbackState.currentPositionMs + seekMs)
+                                                .coerceIn(0L, playbackState.durationMs.coerceAtLeast(0L))
+                                        )
+                                        interactionTick++
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(seekIncrement) {
                             detectTapGestures(
                                 onDoubleTap = { offset ->
                                     val w = size.width.toFloat()
+                                    val seekMs = seekIncrement * 1000L
                                     if (offset.x < w * 0.3f) {
+                                        lastSeekTimeMs = playerTimeMillis()
                                         requestedAction = PlayerAction.SeekTo(
-                                            (playbackState.currentPositionMs - 10000L).coerceAtLeast(0L)
+                                            (playbackState.currentPositionMs - seekMs).coerceAtLeast(0L)
                                         )
+                                        seekIndicatorText = "-${seekIncrement}s"
+                                        interactionTick++
                                     } else if (offset.x > w * 0.7f) {
+                                        lastSeekTimeMs = playerTimeMillis()
                                         requestedAction = PlayerAction.SeekTo(
-                                            (playbackState.currentPositionMs + 10000L).coerceAtMost(playbackState.durationMs)
+                                            (playbackState.currentPositionMs + seekMs).coerceAtMost(playbackState.durationMs)
                                         )
+                                        seekIndicatorText = "+${seekIncrement}s"
+                                        interactionTick++
                                     }
                                 },
-                                onTap = { isControlsVisible = !isControlsVisible }
+                                onTap = {
+                                    isControlsVisible = !isControlsVisible
+                                    interactionTick++
+                                }
                             )
                         }
                 )
@@ -566,20 +720,65 @@ fun PlayerScreen(
                 isVisible = isControlsVisible && !isScreenLocked,
                 isPlaying = playbackState.isPlaying,
                 title = title,
+                seekIncrement = seekIncrement,
+                onSeekIndicatorChange = { seekIndicatorText = it },
                 onPlayPauseToggle = {
                     requestedAction = if (playbackState.isPlaying) PlayerAction.Pause else PlayerAction.Play
+                    interactionTick++
                 },
                 onBackClick = onBackClick,
-                onSeek = { requestedAction = PlayerAction.SeekTo((it * playbackState.durationMs).toLong()) },
+                onSeek = {
+                    lastSeekTimeMs = playerTimeMillis()
+                    requestedAction = PlayerAction.SeekTo((it * playbackState.durationMs).toLong())
+                    interactionTick++
+                },
                 progress = if (playbackState.durationMs > 0) playbackState.currentPositionMs.toFloat() / playbackState.durationMs else 0f,
                 duration = playbackState.durationMs,
                 currentTime = playbackState.currentPositionMs,
                 onSpeedChange = { requestedAction = PlayerAction.SetSpeed(it) },
                 onAudioTrackChange = { groupIndex, trackIndex ->
                     requestedAction = PlayerAction.SelectAudioTrack(groupIndex, trackIndex)
+                    currentAudioGroupIndex = groupIndex
+                    currentAudioTrackIndex = trackIndex
+                    periodicSaveScope.launch {
+                        val pId = profileRepository.activeProfile.value?.id ?: return@launch
+                        val vId = mediaId ?: return@launch
+                        watchProgressDao.insertOrUpdate(
+                            WatchProgress(
+                                mediaId = vId,
+                                profileId = pId,
+                                type = mediaType ?: "movie",
+                                progressMs = playbackState.currentPositionMs,
+                                durationMs = playbackState.durationMs,
+                                audioGroupIndex = groupIndex,
+                                audioTrackIndex = trackIndex,
+                                subtitleGroupIndex = currentSubtitleGroupIndex,
+                                subtitleTrackIndex = currentSubtitleTrackIndex,
+                            )
+                        )
+                    }
                 },
                 onSubtitleTrackChange = { groupIndex, trackIndex ->
                     requestedAction = PlayerAction.SelectSubtitleTrack(groupIndex, trackIndex)
+                    currentSubtitleGroupIndex = groupIndex
+                    currentSubtitleTrackIndex = trackIndex
+                    periodicSaveScope.launch {
+                        val pId = profileRepository.activeProfile.value?.id ?: return@launch
+                        val vId = mediaId ?: return@launch
+                        watchProgressDao.insertOrUpdate(
+                            WatchProgress(
+                                mediaId = vId,
+                                profileId = pId,
+                                type = mediaType ?: "movie",
+                                progressMs = playbackState.currentPositionMs,
+                                durationMs = playbackState.durationMs,
+                                audioGroupIndex = currentAudioGroupIndex,
+                                audioTrackIndex = currentAudioTrackIndex,
+                                subtitleGroupIndex = groupIndex,
+                                subtitleTrackIndex = trackIndex,
+                            )
+                        )
+                    }
                 },
                 onScaleChange = { videoScale = it; requestedAction = PlayerAction.SetScale(it) },
                 onScaleCycle = {
@@ -629,6 +828,25 @@ fun PlayerScreen(
                 onToggleDebug = { showDebugOverlay = !showDebugOverlay },
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Seek indicator overlay (on top of controls, positioned at sides like YouTube)
+            if (seekIndicatorText != null) {
+                val isRewind = seekIndicatorText!!.startsWith("-")
+                Box(
+                    modifier = Modifier
+                        .align(if (isRewind) Alignment.CenterStart else Alignment.CenterEnd)
+                        .padding(horizontal = 48.dp)
+                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 28.dp, vertical = 20.dp)
+                ) {
+                    Text(
+                        text = seekIndicatorText!!,
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
 
             // Debug overlay (shows stream details — stays on top of everything)
             if (showDebugOverlay) {
@@ -771,6 +989,22 @@ fun PlayerScreen(
                 text = "Invalid Stream URL",
                 color = MaterialTheme.colorScheme.error
             )
+        }
+
+        // Loading overlay — drawn after all video content so it renders on top
+        if (showLoading && playbackState.error == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 4.dp,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
         }
     }
 }

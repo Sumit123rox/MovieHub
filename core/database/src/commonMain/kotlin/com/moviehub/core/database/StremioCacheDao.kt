@@ -16,6 +16,18 @@ interface StremioCacheDao {
     @Query("DELETE FROM stremio_cache WHERE id = :id")
     suspend fun delete(id: String)
 
+    @Query("DELETE FROM stremio_cache WHERE type = :type")
+    suspend fun clearByType(type: String)
+
     @Query("DELETE FROM stremio_cache")
     suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM stremio_cache")
+    suspend fun count(): Int
+
+    @Query("SELECT * FROM stremio_cache ORDER BY cachedAt ASC LIMIT :limit")
+    suspend fun getOldestEntries(limit: Int): List<StremioCacheEntity>
+
+    @Query("DELETE FROM stremio_cache WHERE cachedAt < :threshold")
+    suspend fun deleteOlderThan(threshold: Long)
 }

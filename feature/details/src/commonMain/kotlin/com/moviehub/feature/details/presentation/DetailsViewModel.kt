@@ -55,8 +55,6 @@ class DetailsViewModel(
             _state.value = _state.value.copy(
                 isLoading = true,
                 error = null,
-                streams = emptyList(),
-                isSearchingStreams = false,
             )
 
             try {
@@ -83,9 +81,14 @@ class DetailsViewModel(
                         try {
                             val isFav = favoriteDao.getFavoriteById(id, profileId)
                             val progress = watchProgressDao.getProgress(id, profileId).firstOrNull()
+                            val percent = if (progress != null && progress.durationMs > 0) {
+                                (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
+                            } else 0f
                             _state.value = _state.value.copy(
                                 isFavorite = isFav != null,
-                                isWatched = progress?.isWatched == true
+                                isWatched = progress?.isWatched == true,
+                                isInProgress = progress != null && !progress.isWatched && progress.progressMs > 0,
+                                watchProgressPercent = percent,
                             )
                         } catch (e: Exception) {
                             // Non-critical: favorite/progress lookup failure shouldn't block details
@@ -142,11 +145,15 @@ class DetailsViewModel(
             )
 
             try {
-                val results = repository.getStreams(id, type)
-                _state.value = _state.value.copy(
-                    processedStreamAddons = totalAddons,
-                    streams = results.sortedByDescending { it.name?.contains("4K", ignoreCase = true) == true }
-                )
+                var processedCount = 0
+                repository.getStreamsFlow(id, type).collect { partialStreams ->
+                    processedCount++
+                    val sorted = partialStreams.sortedByDescending { it.name?.contains("4K", ignoreCase = true) == true }
+                    _state.value = _state.value.copy(
+                        streams = sorted,
+                        processedStreamAddons = processedCount.coerceAtMost(totalAddons)
+                    )
+                }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(streamsError = e.message)
             } finally {
@@ -177,9 +184,14 @@ class DetailsViewModel(
             try {
                 val isFav = favoriteDao.getFavoriteById(mediaItem.id, profileId)
                 val progress = watchProgressDao.getProgress(mediaItem.id, profileId).firstOrNull()
+                val percent = if (progress != null && progress.durationMs > 0) {
+                    (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
+                } else 0f
                 _state.value = _state.value.copy(
                     isFavorite = isFav != null,
-                    isWatched = progress?.isWatched == true
+                    isWatched = progress?.isWatched == true,
+                    isInProgress = progress != null && !progress.isWatched && progress.progressMs > 0,
+                    watchProgressPercent = percent,
                 )
             } catch (e: Exception) { }
         }
@@ -192,10 +204,12 @@ class DetailsViewModel(
             val current = _state.value.isWatched
 
             if (current) {
-                watchProgressDao.markAsUnwatched(mediaItem.id, profileId)
-                _state.value = _state.value.copy(isWatched = false)
+                // Remove from Continue Watching → delete all stored data (position + track prefs)
+                watchProgressDao.deleteProgress(mediaItem.id, profileId)
+                _state.value = _state.value.copy(isWatched = false, isInProgress = false, watchProgressPercent = 0f)
             } else {
-                // Use insertOrUpdate so a row is created even if it doesn't exist yet
+                // Mark as watched → delete stored data, then insert minimal watched marker
+                watchProgressDao.deleteProgress(mediaItem.id, profileId)
                 watchProgressDao.insertOrUpdate(
                     WatchProgress(
                         mediaId = mediaItem.id,
@@ -206,7 +220,7 @@ class DetailsViewModel(
                         isWatched = true
                     )
                 )
-                _state.value = _state.value.copy(isWatched = true)
+                _state.value = _state.value.copy(isWatched = true, isInProgress = false, watchProgressPercent = 0f)
             }
         }
     }

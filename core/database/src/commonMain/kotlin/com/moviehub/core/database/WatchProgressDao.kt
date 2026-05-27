@@ -18,7 +18,11 @@ data class WatchProgress(
     val type: String,
     val progressMs: Long,
     val durationMs: Long,
-    val isWatched: Boolean = false
+    val isWatched: Boolean = false,
+    val audioGroupIndex: Int = -2,
+    val audioTrackIndex: Int = -2,
+    val subtitleGroupIndex: Int = -2,
+    val subtitleTrackIndex: Int = -2,
 )
 
 @Dao
@@ -37,4 +41,7 @@ interface WatchProgressDao {
 
     @Query("SELECT mediaId FROM watch_progress WHERE profileId = :profileId AND isWatched = 1")
     fun getWatchedMediaIds(profileId: String): Flow<List<String>>
+
+    @Query("DELETE FROM watch_progress WHERE mediaId = :mediaId AND profileId = :profileId")
+    suspend fun deleteProgress(mediaId: String, profileId: String)
 }

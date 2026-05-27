@@ -20,7 +20,8 @@ data class DetailsState(
     val error: String? = null,
     val streamsError: String? = null,
     val isTmdbConfigured: Boolean = false,
-    val isEnrichingMetadata: Boolean = false,
+    val isInProgress: Boolean = false,
+    val watchProgressPercent: Float = 0f,
 )
 
 sealed interface DetailsAction {

@@ -79,7 +79,14 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
     private fun loadInstalledAddons() {
         viewModelScope.launch {
             repository.getInstalledAddonsFlow().collect { addons ->
-                _state.value = _state.value.copy(installedAddons = addons)
+                val sorted = addons.sortedBy { it.name.lowercase() }
+                val urls = mutableMapOf<String, String>()
+                sorted.forEach { manifest ->
+                    repository.getAddonUrl(manifest.id)?.let { url ->
+                        urls[manifest.id] = url
+                    }
+                }
+                _state.value = _state.value.copy(installedAddons = sorted, addonUrls = urls)
             }
         }
     }

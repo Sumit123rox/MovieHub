@@ -14,6 +14,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // Enable high refresh rate (120Hz) on supported displays
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window?.attributes?.preferredRefreshRate = 120f
+        }
+
         // Permit disk reads during startup for library initialization (Koin/Ktor/Reflection)
         val oldPolicy = StrictMode.allowThreadDiskReads()
         try {

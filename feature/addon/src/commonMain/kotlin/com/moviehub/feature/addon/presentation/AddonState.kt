@@ -8,6 +8,7 @@ data class AddonState(
     val addonUrl: String = "",
     val isInstalling: Boolean = false,
     val installedAddons: List<StremioManifest> = emptyList(),
+    val addonUrls: Map<String, String> = emptyMap(),
     val error: String? = null,
     val successMessage: String? = null
 )

@@ -27,6 +27,21 @@ interface WatchHistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWatchHistory(watchHistory: WatchHistoryEntity)
 
+    @Query("""
+        INSERT OR REPLACE INTO watch_history(mediaId, profileId, title, type, posterPath, lastWatchedAt)
+        VALUES (:mediaId, :profileId, :title, :type,
+                COALESCE(NULLIF(:posterPath, ''), (SELECT posterPath FROM watch_history WHERE mediaId = :mediaId AND profileId = :profileId)),
+                :lastWatchedAt)
+    """)
+    suspend fun conditionalUpsertWatchHistory(
+        mediaId: String,
+        profileId: String,
+        title: String,
+        type: String,
+        posterPath: String?,
+        lastWatchedAt: Long = com.moviehub.core.utils.currentTimeMillis()
+    )
+
     @Update
     suspend fun updateWatchHistory(watchHistory: WatchHistoryEntity)
 

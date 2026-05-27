@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaType
 import com.moviehub.feature.details.presentation.components.*
@@ -30,6 +31,7 @@ fun DetailsScreen(
     onNavigateToDetails: (id: String, type: String) -> Unit = { _, _ -> },
     onBackClick: () -> Unit = {},
     onCastClick: ((com.moviehub.core.model.MediaPerson) -> Unit)? = null,
+    onNavigateToSettings: () -> Unit = {},
     viewModel: DetailsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -133,7 +135,18 @@ fun DetailsScreen(
                                 .padding(horizontal = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            val playLabel = when {
+                                state.isWatched -> "Watch Again"
+                                state.isInProgress -> {
+                                    val pct = (state.watchProgressPercent * 100).toInt()
+                                    "Continue ${pct}%"
+                                }
+                                media.type == MediaType.SHOW -> "S1 E1"
+                                else -> "Play"
+                            }
+
                             DetailActionButtons(
+                                playLabel = playLabel,
                                 onPlayClick = {
                                     val streamId = if (media.type == MediaType.SHOW) {
                                         // Default to S1E1 if main play is clicked
@@ -144,6 +157,17 @@ fun DetailsScreen(
                                 isSaved = state.isFavorite,
                                 onSaveClick = { viewModel.onAction(DetailsAction.ToggleFavorite) }
                             )
+
+                            // In-progress mini bar
+                            if (state.isInProgress) {
+                                val pct = state.watchProgressPercent
+                                LinearProgressIndicator(
+                                    progress = { pct },
+                                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                )
+                            }
 
                             // Watched Toggle
                             WatchedToggle(
@@ -178,14 +202,14 @@ fun DetailsScreen(
                         }
                     }
 
-                    if (media.type == MediaType.SHOW && media.videos.isNotEmpty()) {
+                    if (media.type == MediaType.SHOW) {
                         item {
                             DetailSeriesContent(
                                 media = media,
                                 onEpisodeClick = { episode ->
                                     val streamId = if (episode.id.isNotBlank() && episode.id.contains(":")) episode.id else "${media.id}:${episode.season}:${episode.episode}"
                                     onNavigateToStreams(streamId, "series", media.id)
-                                }
+                                },
                             )
                         }
                     }
@@ -209,6 +233,30 @@ fun DetailsScreen(
                                 },
                                 modifier = Modifier.padding(vertical = 16.dp)
                             )
+                        }
+                    } else {
+                        item {
+                            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+                                Text(
+                                    text = "More Like This",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (state.isTmdbConfigured)
+                                        "No related content found on TMDB for this title."
+                                    else
+                                        "Add a TMDB API key in Settings to get personalized recommendations.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(onClick = onNavigateToSettings) {
+                                    Text("Go to Settings")
+                                }
+                            }
                         }
                     }
 

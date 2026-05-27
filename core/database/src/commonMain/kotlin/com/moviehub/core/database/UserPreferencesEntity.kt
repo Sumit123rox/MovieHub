@@ -11,4 +11,5 @@ data class UserPreferencesEntity(
     val useAmoled: Boolean = true,
     val language: String = "en",
     val tmdbApiKey: String = "",
+    val seekIncrement: Int = 10,
 )

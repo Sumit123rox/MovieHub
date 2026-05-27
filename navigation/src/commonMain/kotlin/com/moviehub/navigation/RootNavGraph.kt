@@ -3,6 +3,9 @@ package com.moviehub.navigation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,6 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -59,7 +63,6 @@ import com.moviehub.feature.search.presentation.SearchScreen
 import com.moviehub.feature.sync.presentation.SyncScreen
 import org.koin.compose.koinInject
 import com.moviehub.core.database.ProfileRepository
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -69,24 +72,15 @@ fun RootNavGraph() {
     val profileRepository: ProfileRepository = koinInject()
     val activeProfile by profileRepository.activeProfile.collectAsState()
 
-    // Redirect to Profile selection if there's no active profile.
-    // Wrap in runCatching because NavHost may not have called setGraph() yet
-    // on the very first frame, triggering IllegalStateException. Retry with delay
-    // if the graph isn't ready yet.
-    LaunchedEffect(activeProfile) {
-        if (activeProfile == null) {
-            var attempts = 0
-            while (attempts < 10) {
-                val result = kotlin.runCatching {
-                    navController.navigate(Screen.Profile) {
-                        popUpTo(Screen.Home) { inclusive = false }
-                    }
-                }
-                if (result.isSuccess) break
-                delay(100)
-                attempts++
+    // No active profile → show the profile picker directly (never render HomeScreen first)
+    if (activeProfile == null) {
+        ProfileScreen(
+            viewModel = koinViewModel(),
+            onProfileSelected = {
+                // activeProfile is now set; this composable recomposes and renders NavHost
             }
-        }
+        )
+        return
     }
 
     Scaffold(
@@ -126,8 +120,23 @@ fun RootNavGraph() {
                     items.forEach { item ->
                         val isSelected = currentDestination?.hierarchy?.any { it.route?.contains(item.screen::class.simpleName ?: "") == true } == true
                         
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.15f else 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            ),
+                            label = "nav_icon_scale"
+                        )
+
                         NavigationBarItem(
-                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            icon = {
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = item.label,
+                                    modifier = Modifier.scale(iconScale)
+                                )
+                            },
                             label = { Text(item.label) },
                             selected = isSelected,
                             onClick = {
@@ -180,14 +189,8 @@ fun RootNavGraph() {
                     onMediaClick = { id, type, addonUrl ->
                         navController.navigate(Screen.Details(id, type, addonUrl))
                     },
-                    onAuthClick = {
-                        navController.navigate(Screen.Auth)
-                    },
                     onSeeAllClick = { title, type, catalogId, addonId ->
                         navController.navigate(Screen.Catalog(title, type, catalogId, addonId))
-                    },
-                    onSearchClick = {
-                        navController.navigate(Screen.Search)
                     },
                     onAddonsClick = {
                         navController.navigate(Screen.Addon)
@@ -222,16 +225,6 @@ fun RootNavGraph() {
             }
             composable<Screen.Sync> {
                 SyncScreen()
-            }
-            composable<Screen.Profile> {
-                ProfileScreen(
-                    viewModel = koinViewModel(),
-                    onProfileSelected = {
-                        navController.navigate(Screen.Home) {
-                            popUpTo(Screen.Profile) { inclusive = true }
-                        }
-                    }
-                )
             }
             composable<Screen.Settings> {
                 val scope = rememberCoroutineScope()
@@ -278,6 +271,7 @@ fun RootNavGraph() {
                         navController.navigate(Screen.Details(id, type))
                     },
                     onBackClick = { navController.popBackStack() },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings) },
                     onCastClick = { person ->
                         val tmdbId = person.tmdbId
                         if (tmdbId != null) {

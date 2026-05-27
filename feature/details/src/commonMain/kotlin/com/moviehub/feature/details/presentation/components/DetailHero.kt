@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,7 +20,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.ui.components.shimmerEffect
 import io.kamel.image.KamelImage
@@ -78,17 +82,21 @@ fun DetailHero(
                 }
 
                 // Gradient overlay that blends hero image into the background
+                val isDarkBg = MaterialTheme.colorScheme.background.run {
+                    (red * 0.299 + green * 0.587 + blue * 0.114) < 0.5
+                }
+                val gradientHeight = if (isDarkBg) 120.dp else 180.dp
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(gradientHeight)
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    Color.Black.copy(alpha = 0.5f),
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.8f),
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.3f),
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
                                     MaterialTheme.colorScheme.background,
                                 ),
                             ),
@@ -131,6 +139,46 @@ fun DetailHero(
                                 alignment = Alignment.Center,
                                 contentScale = ContentScale.Fit,
                                 onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
+                            )
+                        }
+                    }
+                } else {
+                    // Compact text-based title fallback when logo is unavailable
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = if (isTablet) 48.dp else 24.dp)
+                            .padding(bottom = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = media.title,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.3).sp
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.graphicsLayer {
+                                shadowElevation = 4f
+                            }
+                        )
+                        val subtitleParts = buildList {
+                            media.releaseInfo?.take(4)?.let { add(it) }
+                            media.runtime?.let { add(it) }
+                        }
+                        if (subtitleParts.isNotEmpty()) {
+                            Text(
+                                text = subtitleParts.joinToString(" • "),
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 0.2.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 4.dp)
                             )
                         }
                     }

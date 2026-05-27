@@ -1,7 +1,9 @@
 package com.moviehub.feature.player.presentation
 
 import android.app.Activity
+import android.content.Context
 import android.content.ContextWrapper
+import android.media.AudioManager
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -14,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -24,6 +29,7 @@ import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -36,8 +42,13 @@ import com.moviehub.core.model.SubtitleTrack
 import com.moviehub.core.model.VideoScale
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.session.MediaSession
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 @OptIn(UnstableApi::class)
 @Composable
 actual fun VideoPlayer(
@@ -101,20 +112,53 @@ actual fun VideoPlayer(
         }
     }
 
-    // Apply screen brightness
+    // Apply screen brightness and sync to system brightness settings
     LaunchedEffect(brightness) {
         activity?.window?.let { window ->
             val lp = window.attributes
-            lp.screenBrightness = brightness
+            lp.screenBrightness = brightness.coerceIn(0f, 1f)
             window.attributes = lp
         }
+        // Sync with system brightness setting if permission is granted
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M
+                && android.provider.Settings.System.canWrite(context)
+            ) {
+                android.provider.Settings.System.putInt(
+                    context.contentResolver,
+                    android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                    (brightness.coerceIn(0f, 1f) * 255).toInt().coerceIn(0, 255)
+                )
+            }
+        } catch (_: Exception) { }
+    }
+
+    val okHttpClient = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .build()
     }
 
     // Rebuild ExoPlayer when headers change (source switch) so the data source factory uses new proxy headers
     val exoPlayer = remember(headers) {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headers)
-            .setAllowCrossProtocolRedirects(true)
+
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs */ 50_000,
+                /* maxBufferMs */ 120_000,
+                /* bufferForPlaybackMs */ 2_500,
+                /* bufferForPlaybackAfterRebufferMs */ 5_000
+            )
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .setBackBuffer(30_000, false)
+            .build()
 
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpDataSourceFactory)
@@ -126,6 +170,7 @@ actual fun VideoPlayer(
 
         val builder = ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, true)
 
         builder.build()
@@ -186,6 +231,18 @@ actual fun VideoPlayer(
                 MediaItem.fromUri(url)
             }
             exoPlayer.setMediaItem(mediaItem)
+            // Preconnect: warm DNS + TCP + TLS before prepare()
+            try {
+                withContext(Dispatchers.IO) {
+                    val headRequest = okhttp3.Request.Builder()
+                        .url(url)
+                        .head()
+                        .build()
+                    okHttpClient.newCall(headRequest).execute().close()
+                }
+            } catch (_: Exception) {
+                // Best-effort preconnect — media will still load via normal prepare()
+            }
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
         } catch (e: Exception) {
@@ -283,7 +340,10 @@ actual fun VideoPlayer(
                 }
 
                 is PlayerAction.SetVolume -> {
-                    exoPlayer.volume = action.volume.coerceIn(0f, 1f)
+                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val newVolume = (action.volume.coerceIn(0f, 1f) * max).toInt().coerceIn(0, max)
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, AudioManager.FLAG_SHOW_UI)
                 }
 
                 is PlayerAction.SelectAudioTrack -> {
@@ -409,10 +469,30 @@ actual fun VideoPlayer(
         }
     }
 
-    // Dispose exoPlayer when reference changes (headers key) or composable leaves composition
+    // ExoPlayer reference guard: set to null after release to prevent stale access
+    // from PlayerView cleanup or LaunchedEffects that race disposal
+    var playerReleased by remember { mutableStateOf(false) }
+
+    // Auto Picture-in-Picture via onUserLeaveHint (fires on Home/Recents, not rotation)
     DisposableEffect(exoPlayer) {
+        val pipListener = Runnable {
+            if (exoPlayer.playWhenReady && !playerReleased) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    try {
+                        val videoFormat = exoPlayer.videoFormat
+                        val rational = if (videoFormat != null && videoFormat.width > 0 && videoFormat.height > 0) {
+                            android.util.Rational(videoFormat.width, videoFormat.height)
+                        } else null
+                        val builder = android.app.PictureInPictureParams.Builder()
+                        if (rational != null) builder.setAspectRatio(rational)
+                        activity?.enterPictureInPictureMode(builder.build())
+                    } catch (_: Exception) { }
+                }
+            }
+        }
+        (activity as? androidx.activity.ComponentActivity)?.addOnUserLeaveHintListener(pipListener)
         onDispose {
-            exoPlayer.release()
+            (activity as? androidx.activity.ComponentActivity)?.removeOnUserLeaveHintListener(pipListener)
         }
     }
 
@@ -430,6 +510,17 @@ actual fun VideoPlayer(
                     sv.invalidate()
                 }
             }
+        },
+        onRelease = { releasedView ->
+            // Release player AFTER PlayerView is detached — prevents crash when
+            // PlayerView's onDetachedFromWindow tries to access the released player
+            releasedView.player = null
+            try {
+                exoPlayer.release()
+            } catch (_: Exception) {
+                // ExoPlayer release is best-effort at this point
+            }
+            playerReleased = true
         },
         modifier = modifier
     )

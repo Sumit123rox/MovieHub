@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -12,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaPreview
 import com.moviehub.core.ui.components.Poster
@@ -46,11 +48,23 @@ fun DetailPosterRailSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(items, key = { it.id }) { item ->
-                Poster(
-                    url = item.posterUrl,
-                    onClick = { onPosterClick?.invoke(item) },
-                    modifier = Modifier
-                )
+                Column(
+                    modifier = Modifier.width(120.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Poster(
+                        url = item.posterUrl,
+                        onClick = { onPosterClick?.invoke(item) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

@@ -44,6 +44,8 @@ kotlin {
             implementation(libs.androidx.mediarouter)
             implementation(libs.play.services.cast.framework)
             implementation(libs.kotlin.reflect)
+            implementation(libs.okhttp)
+            implementation(libs.androidx.media3.datasource.okhttp)
         }
     }
 }

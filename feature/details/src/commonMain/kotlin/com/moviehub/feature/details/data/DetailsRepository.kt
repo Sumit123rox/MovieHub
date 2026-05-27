@@ -1,8 +1,10 @@
 package com.moviehub.feature.details.data
 
 import co.touchlab.kermit.Logger
+import com.moviehub.core.database.CacheService
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.MediaItemStore
+import com.moviehub.core.model.MetaResponse
 import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.mapper.toDomain
 import com.moviehub.core.model.StreamItem
@@ -13,11 +15,15 @@ import com.moviehub.core.network.tmdb.TmdbEnrichmentService
 import com.moviehub.core.network.tmdb.TmdbService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.supervisorScope
+import kotlinx.serialization.json.Json
 
 interface DetailsRepository {
     suspend fun getMediaDetails(id: String, type: String, addonUrl: String? = null): MediaItem?
     suspend fun getStreams(id: String, type: String): List<StreamItem>
+    fun getStreamsFlow(id: String, type: String): Flow<List<StreamItem>>
     suspend fun getStreamAddonCount(type: String): Int
 }
 
@@ -26,9 +32,12 @@ class DetailsRepositoryImpl(
     private val addonManager: AddonManager,
     private val scraperManager: ScraperManager,
     private val tmdbEnrichment: TmdbEnrichmentService,
+    private val cacheService: CacheService,
+    private val json: Json,
 ) : DetailsRepository {
 
     private val logger = Logger.withTag("DetailsRepository")
+    private val metaSerializer = MetaResponse.serializer()
 
     override suspend fun getMediaDetails(id: String, type: String, addonUrl: String?): MediaItem? {
         val normalizedType = when (type.lowercase()) {
@@ -37,9 +46,37 @@ class DetailsRepositoryImpl(
             else -> type.lowercase()
         }
 
+        // 1. Try in-memory store first (fastest)
+        MediaItemStore.get(id)?.let { cached ->
+            logger.i { "Retrieved MediaItem from in-memory store for $id" }
+            val enriched = try {
+                tmdbEnrichment.enrich(cached)
+            } catch (e: Exception) {
+                logger.w { "TMDB enrichment failed for in-memory item: ${e.message}" }
+                cached
+            }
+            MediaItemStore.put(id, enriched)
+            return enriched
+        }
+
+        // 2. Try persistent cache
+        val cacheKey = CacheService.metaKey(id)
+        val cachedResponse = cacheService.getCachedParsed(cacheKey, metaSerializer)
+        if (cachedResponse != null) {
+            logger.i { "Retrieved MediaItem from persistent cache for $id" }
+            // Enrich with TMDB before returning from cache
+            val mediaItem = cachedResponse.meta.toDomain(addonUrl = addonUrl)
+            return try {
+                tmdbEnrichment.enrich(mediaItem)
+            } catch (e: Exception) {
+                logger.w { "TMDB enrichment failed for cached item: ${e.message}" }
+                mediaItem
+            }
+        }
+
         var mediaItem: MediaItem? = null
 
-        // 1. Try Primary Source (from card click) — only if the addon supports "meta"
+        // 3. Try Primary Source (from card click)
         if (addonUrl != null) {
             val primaryAddon = addonManager.getAddonByUrl(addonUrl)
             val supportsMeta = primaryAddon?.resources?.contains("meta") == true
@@ -48,6 +85,7 @@ class DetailsRepositoryImpl(
                     val response = apiClient.getMeta(addonUrl, normalizedType, id)
                     if (response != null) {
                         mediaItem = response.meta.toDomain(addonUrl = addonUrl)
+                        cacheService.putCache(cacheKey, "meta", json.encodeToString(metaSerializer, response))
                     }
                 } catch (e: Exception) {
                     logger.w { "Primary meta fetch failed for $id at $addonUrl: ${e.message}" }
@@ -57,7 +95,7 @@ class DetailsRepositoryImpl(
             }
         }
 
-        // 2. Try User-Installed Fallbacks
+        // 4. Try User-Installed Fallbacks
         if (mediaItem == null) {
             val metaAddons = addonManager.getAddonsProviding("meta", normalizedType)
             for ((url, manifest) in metaAddons) {
@@ -67,6 +105,7 @@ class DetailsRepositoryImpl(
                     if (response != null) {
                         logger.i { "Metadata found via fallback addon: ${manifest.name}" }
                         mediaItem = response.meta.toDomain(addonId = manifest.id, addonUrl = url)
+                        cacheService.putCache(cacheKey, "meta", json.encodeToString(metaSerializer, response))
                         break
                     }
                 } catch (e: Exception) {
@@ -82,11 +121,13 @@ class DetailsRepositoryImpl(
             } catch (e: Exception) {
                 logger.w { "TMDB enrichment failed: ${e.message}" }
             }
+            // Store in in-memory cache so downstream consumers (StreamsScreen) find it
+            MediaItemStore.put(id, mediaItem)
         }
 
-        // 3. TMDB Fallback — create MediaItem from scratch when no addon provides metadata
+        // 5. TMDB Fallback — create MediaItem from scratch when no addon provides metadata
         if (mediaItem == null) {
-            // 3a. Try IMDb ID
+            // 5a. Try IMDb ID
             val imdbId = id.split(":", "/", "?", "&").firstOrNull { it.startsWith("tt") && it.length > 2 }
             if (imdbId != null) {
                 try {
@@ -101,7 +142,7 @@ class DetailsRepositoryImpl(
             }
         }
 
-        // 3b. Try TMDB numeric ID (for More Like This, recommendations, collections, etc.)
+        // 5b. Try TMDB numeric ID (for More Like This, recommendations, collections, etc.)
         if (mediaItem == null) {
             val tmdbId = TmdbService.extractTmdbId(id)
             if (tmdbId != null) {
@@ -117,7 +158,7 @@ class DetailsRepositoryImpl(
             }
         }
 
-        // 4. In-memory fallback — item cached from catalog/HomeScreen before navigation
+        // 6. In-memory fallback (already checked at top, but double-check)
         if (mediaItem == null) {
             mediaItem = MediaItemStore.get(id)
             if (mediaItem != null) {
@@ -140,6 +181,8 @@ class DetailsRepositoryImpl(
         val imdbId = parts.getOrNull(0) ?: id
         val season = parts.getOrNull(1)?.toIntOrNull()
         val episode = parts.getOrNull(2)?.toIntOrNull()
+
+        val cacheKey = CacheService.streamKey(id, type)
 
         // 1. Launch Stremio HTTP addon stream queries concurrently
         val torrentDeferred = async {
@@ -187,9 +230,117 @@ class DetailsRepositoryImpl(
         val scraperStreams = scraperDeferred.await()
         val torrentStreams = torrentDeferred.await()
 
-        logger.i { "Stream merge: ${scraperStreams.size} direct-play + ${torrentStreams.size} torrent = ${scraperStreams.size + torrentStreams.size} total" }
+        val merged = mergeStreams(scraperStreams, torrentStreams)
+        logger.i { "Stream merge: ${scraperStreams.size} direct-play + ${torrentStreams.size} torrent = ${merged.size} unique" }
 
-        scraperStreams + torrentStreams
+        // Cache the merged result for offline fallback
+        val streamSerializer = com.moviehub.core.model.StremioStreamResponse.serializer()
+        cacheService.putCache(cacheKey, "stream", json.encodeToString(streamSerializer, com.moviehub.core.model.StremioStreamResponse(streams = merged)))
+
+        merged
+    }
+
+    override fun getStreamsFlow(id: String, type: String): Flow<List<StreamItem>> = channelFlow {
+        val normalizedType = when (type.lowercase()) {
+            "show", "tv", "series" -> "series"
+            "movie" -> "movie"
+            else -> type.lowercase()
+        }
+
+        val parts = id.split(":")
+        val imdbId = parts.getOrNull(0) ?: id
+        val season = parts.getOrNull(1)?.toIntOrNull()
+        val episode = parts.getOrNull(2)?.toIntOrNull()
+
+        val seen = mutableSetOf<String>()
+        val accumulated = mutableListOf<StreamItem>()
+
+        fun addUnique(streams: List<StreamItem>) {
+            streams.forEach { stream ->
+                val key = stream.url ?: stream.infoHash ?: "${stream.name}:${stream.description}"
+                if (key !in seen) {
+                    seen.add(key)
+                    accumulated.add(stream)
+                }
+            }
+        }
+
+        val streamSerializer = com.moviehub.core.model.StremioStreamResponse.serializer()
+        val cacheKey = CacheService.streamKey(id, type)
+
+        // PHASE 1: Emit cached streams immediately (offline-first)
+        try {
+            val cached = cacheService.getCachedParsed(cacheKey, streamSerializer)
+            if (cached != null && cached.streams.isNotEmpty()) {
+                addUnique(cached.streams)
+                send(accumulated.toList())
+            } else {
+                send(emptyList())
+            }
+        } catch (e: Exception) {
+            send(emptyList())
+        }
+
+        // PHASE 2: Process stream addons sequentially — emit after each one completes
+        val streamAddons = addonManager.getAddonsProviding("stream", normalizedType)
+        for ((url, manifest) in streamAddons) {
+            try {
+                val streams = apiClient.getStreams(
+                    baseUrl = url,
+                    type = normalizedType,
+                    id = id,
+                    addonName = manifest.name,
+                    addonId = manifest.id
+                )
+                addUnique(streams)
+                send(accumulated.toList())
+            } catch (e: Exception) {
+                logger.w { "Stream addon ${manifest.name} failed: ${e.message}" }
+            }
+        }
+
+        // PHASE 3: Process each scraper individually and emit after each one
+        val scrapers = scraperManager.getRegisteredScrapers()
+        if (scrapers.isNotEmpty()) {
+            logger.i { "Processing ${scrapers.size} registered scrapers for $id" }
+            for (scraper in scrapers) {
+                try {
+                    val scraperStreams = scraperManager.getStreamsFromScraper(
+                        scraperId = scraper.id,
+                        imdbId = imdbId,
+                        type = normalizedType,
+                        season = season,
+                        episode = episode,
+                    )
+                    addUnique(scraperStreams)
+                    send(accumulated.toList())
+                } catch (e: Exception) {
+                    logger.w { "Scraper ${scraper.name} failed: ${e.message}" }
+                }
+            }
+        }
+
+        logger.i { "StreamsFlow resolved ${accumulated.size} unique streams for $id (${streamAddons.size} addons, ${scrapers.size} scrapers)" }
+
+        // Cache the final merged result
+        cacheService.putCache(cacheKey, "stream", json.encodeToString(streamSerializer, com.moviehub.core.model.StremioStreamResponse(streams = accumulated)))
+    }
+
+    private fun mergeStreams(directPlay: List<StreamItem>, torrent: List<StreamItem>): List<StreamItem> {
+        val seen = mutableSetOf<String>()
+        val result = mutableListOf<StreamItem>()
+
+        // Direct-play first, then torrent
+        (directPlay + torrent).forEach { stream ->
+            val key = stream.url
+                ?: stream.infoHash
+                ?: "${stream.name}:${stream.description}"
+            if (key !in seen) {
+                seen.add(key)
+                result.add(stream)
+            }
+        }
+        return result
     }
 
     override suspend fun getStreamAddonCount(type: String): Int {
@@ -198,6 +349,8 @@ class DetailsRepositoryImpl(
             "movie" -> "movie"
             else -> type.lowercase()
         }
-        return addonManager.getAddonsProviding("stream", normalizedType).size + 1 // +1 for scrapers
+        val addonCount = addonManager.getAddonsProviding("stream", normalizedType).size
+        val scraperCount = scraperManager.getRegisteredScrapers().size
+        return addonCount + scraperCount
     }
 }

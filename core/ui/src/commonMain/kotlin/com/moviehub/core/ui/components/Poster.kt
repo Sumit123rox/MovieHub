@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -13,24 +11,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import co.touchlab.kermit.Logger
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
-
-private val posterLogger = Logger.withTag("Poster")
 
 @Composable
 fun Poster(
     url: String?,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    title: String? = null,
     shape: Shape = MaterialTheme.shapes.medium,
     aspectRatio: Float = 2f / 3f,
     quality: String? = null,
@@ -59,8 +53,7 @@ fun Poster(
                                 .shimmerEffect()
                         )
                     },
-                    onFailure = { error ->
-                        posterLogger.e(error) { "Failed to load poster image" }
+                    onFailure = {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("!", color = MaterialTheme.colorScheme.error)
                         }
@@ -68,7 +61,15 @@ fun Poster(
                 )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No URL", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = title ?: "No URL",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 3,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(8.dp)
+                    )
                 }
             }
 
@@ -88,12 +89,12 @@ fun Poster(
                         .fillMaxWidth()
                         .height(4.dp)
                         .align(Alignment.BottomCenter)
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(fraction = progressFraction.coerceIn(0f, 1f))
-                            .background(Color(0xFF4CAF50))
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 }
             }
@@ -105,12 +106,12 @@ fun Poster(
                         .align(Alignment.TopStart)
                         .padding(8.dp)
                         .size(26.dp)
-                        .background(Color(0xFF4CAF50), CircleShape),
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "✓",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
