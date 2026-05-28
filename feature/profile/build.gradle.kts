@@ -23,6 +23,7 @@ kotlin {
             implementation(project(":core:ui"))
             implementation(project(":core:model"))
             implementation(project(":core:network"))
+            implementation(project(":core:utils"))
             implementation(project(":core:database"))
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.compose)

@@ -16,10 +16,11 @@ import androidx.room3.TypeConverters
         WatchProgress::class,
         StremioCacheEntity::class,
         ProfileEntity::class,
-        DownloadEntity::class
+        DownloadEntity::class,
+        MediaFtsEntity::class
     ],
-    version = 6,
-    exportSchema = false
+    version = 9,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 @ConstructedBy(MovieDatabaseConstructor::class)

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -33,12 +34,13 @@ import com.moviehub.core.database.TmdbSettingsRepository
 import com.moviehub.core.database.UserPreferencesDao
 import com.moviehub.core.database.UserPreferencesEntity
 import com.moviehub.core.ui.components.ContentCard
+import com.moviehub.core.ui.text.nativeTextFieldImeOptions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SettingsScreen(
     onSwitchProfile: () -> Unit,
@@ -267,7 +269,7 @@ fun SettingsScreen(
                                     unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                     cursorColor = MaterialTheme.colorScheme.onSurface,
                                 ),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, platformImeOptions = nativeTextFieldImeOptions()),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Row(

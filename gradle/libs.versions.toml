@@ -33,10 +33,12 @@ reorderable = "3.1.0"
 desugarJdkLibs = "2.1.5"
 kamel = "1.0.9"
 multidex = "2.0.1"
+profileinstaller = "1.4.1"
+leakcanary = "2.14"
 
 room3 = "3.0.0-alpha05"
 sqlite3 = "2.6.2"
-ksp = "2.3.7"
+ksp = "2.3.9"
 mediarouter = "1.8.1"
 play-services-cast = "22.3.1"
 
@@ -104,6 +106,8 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 multidex = { module = "androidx.multidex:multidex", version.ref = "multidex" }
+androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
+leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt", version.ref = "supabase" }
 supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt", version.ref = "supabase" }
 supabase-functions = { module = "io.github.jan-tennert.supabase:functions-kt", version.ref = "supabase" }

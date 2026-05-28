@@ -2,6 +2,7 @@ package com.sumit.moviehub
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.moviehub.core.database.ProfileRepository
@@ -10,6 +11,7 @@ import com.moviehub.core.database.UserPreferencesEntity
 import com.moviehub.core.ui.theme.AccentType
 import com.moviehub.core.ui.theme.MovieHubTheme
 import com.moviehub.core.ui.theme.ThemeType
+import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.navigation.RootNavGraph
 import io.kamel.core.config.KamelConfig
 import io.kamel.core.config.httpUrlFetcher
@@ -23,9 +25,9 @@ val movieHubKamelConfig = KamelConfig {
     takeFrom(KamelConfig.Default)
     imageBitmapCacheSize = 2000
     imageVectorCacheSize = 500
-    // Increase HTTP response cache from default 10MB to 50MB for better offline image reuse
+    // Disk-backed image cache at 100 MB (HTTP response cache doubles as disk cache in Kamel)
     httpUrlFetcher {
-        httpCache(50L * 1024 * 1024)
+        httpCache(100L * 1024 * 1024)
     }
 }
 
@@ -59,9 +61,11 @@ fun App() {
         AccentType.BLUE
     }
 
+    SideEffect { PerformanceMonitor.beginSection("App.compose") }
     CompositionLocalProvider(LocalKamelConfig provides movieHubKamelConfig) {
         MovieHubTheme(themeType = themeType, accentType = accentType) {
             RootNavGraph()
         }
     }
+    SideEffect { PerformanceMonitor.endSection() }
 }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.moviehub.core.utils.PerformanceMonitor
 
 class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
     private val _state = MutableStateFlow(AddonState())
@@ -62,31 +63,45 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
     private fun refreshAddon(addonId: String) {
         val url = repository.getAddonUrl(addonId) ?: return
         viewModelScope.launch {
-            repository.fetchAddonManifest(url)
-            // loadInstalledAddons is already observing or manually triggered
+            PerformanceMonitor.beginSection("VM:Addon:refreshAddon")
+            try {
+                repository.fetchAddonManifest(url)
+            } finally {
+                PerformanceMonitor.endSection()
+            }
         }
     }
 
     private fun removeAddon(addonId: String) {
         viewModelScope.launch {
-            val result = repository.removeAddon(addonId)
-            if (result.isSuccess) {
-                // repository flow should update automatically
+            PerformanceMonitor.beginSection("VM:Addon:removeAddon")
+            try {
+                val result = repository.removeAddon(addonId)
+                if (result.isSuccess) {
+                    // repository flow should update automatically
+                }
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }
 
     private fun loadInstalledAddons() {
         viewModelScope.launch {
-            repository.getInstalledAddonsFlow().collect { addons ->
-                val sorted = addons.sortedBy { it.name.lowercase() }
-                val urls = mutableMapOf<String, String>()
-                sorted.forEach { manifest ->
-                    repository.getAddonUrl(manifest.id)?.let { url ->
-                        urls[manifest.id] = url
+            PerformanceMonitor.beginSection("VM:Addon:loadInstalledAddons")
+            try {
+                repository.getInstalledAddonsFlow().collect { addons ->
+                    val sorted = addons.sortedBy { it.name.lowercase() }
+                    val urls = mutableMapOf<String, String>()
+                    sorted.forEach { manifest ->
+                        repository.getAddonUrl(manifest.id)?.let { url ->
+                            urls[manifest.id] = url
+                        }
                     }
+                    _state.value = _state.value.copy(installedAddons = sorted, addonUrls = urls)
                 }
-                _state.value = _state.value.copy(installedAddons = sorted, addonUrls = urls)
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }
@@ -96,22 +111,27 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
         if (currentUrl.isBlank()) return
 
         viewModelScope.launch {
-            _state.value = _state.value.copy(isInstalling = true, error = null, successMessage = null)
-            
-            val result = repository.fetchAddonManifest(currentUrl)
-            
-            if (result.isSuccess) {
-                val manifest = result.getOrNull()
-                _state.value = _state.value.copy(
-                    isInstalling = false,
-                    successMessage = "Successfully installed ${manifest?.name}",
-                    addonUrl = ""
-                )
-            } else {
-                _state.value = _state.value.copy(
-                    isInstalling = false,
-                    error = "Failed to install addon: ${result.exceptionOrNull()?.message}"
-                )
+            PerformanceMonitor.beginSection("VM:Addon:installAddon")
+            try {
+                _state.value = _state.value.copy(isInstalling = true, error = null, successMessage = null)
+
+                val result = repository.fetchAddonManifest(currentUrl)
+
+                if (result.isSuccess) {
+                    val manifest = result.getOrNull()
+                    _state.value = _state.value.copy(
+                        isInstalling = false,
+                        successMessage = "Successfully installed ${manifest?.name}",
+                        addonUrl = ""
+                    )
+                } else {
+                    _state.value = _state.value.copy(
+                        isInstalling = false,
+                        error = "Failed to install addon: ${result.exceptionOrNull()?.message}"
+                    )
+                }
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }

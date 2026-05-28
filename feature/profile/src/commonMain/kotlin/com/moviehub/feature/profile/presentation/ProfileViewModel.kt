@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.moviehub.core.utils.PerformanceMonitor
 
 data class ProfileUiState(
     val profiles: List<Profile> = emptyList(),
@@ -40,30 +41,40 @@ class ProfileViewModel(
 
     fun selectProfile(profile: Profile) {
         viewModelScope.launch {
-            profileRepository.setActiveProfile(profile)
+            PerformanceMonitor.beginSection("VM:Profile:selectProfile")
+            try {
+                profileRepository.setActiveProfile(profile)
+            } finally {
+                PerformanceMonitor.endSection()
+            }
         }
     }
 
     fun createProfile(name: String, cloneFromActive: Boolean = false) {
         viewModelScope.launch {
-            val currentActive = profileRepository.activeProfile.value
-            val newProfile = profileRepository.createProfile(name)
-            
-            if (cloneFromActive && currentActive != null) {
-                // Addon Inheritance Twist: Clone addons from active profile
-                val activeAddons = addonManager.installedAddons.value
-                activeAddons.forEach { manifest ->
-                    val url = addonManager.getAddonUrl(manifest.id)
-                    if (url != null) {
-                        // Temporarily set active profile to new one to add addons
-                        profileRepository.setActiveProfile(newProfile)
-                        addonManager.addAddon(url, manifest)
+            PerformanceMonitor.beginSection("VM:Profile:createProfile")
+            try {
+                val currentActive = profileRepository.activeProfile.value
+                val newProfile = profileRepository.createProfile(name)
+
+                if (cloneFromActive && currentActive != null) {
+                    // Addon Inheritance Twist: Clone addons from active profile
+                    val activeAddons = addonManager.installedAddons.value
+                    activeAddons.forEach { manifest ->
+                        val url = addonManager.getAddonUrl(manifest.id)
+                        if (url != null) {
+                            // Temporarily set active profile to new one to add addons
+                            profileRepository.setActiveProfile(newProfile)
+                            addonManager.addAddon(url, manifest)
+                        }
                     }
+                    // Switch back to new profile
+                    profileRepository.setActiveProfile(newProfile)
+                } else if (profileRepository.activeProfile.value == null) {
+                    profileRepository.setActiveProfile(newProfile)
                 }
-                // Switch back to new profile
-                profileRepository.setActiveProfile(newProfile)
-            } else if (profileRepository.activeProfile.value == null) {
-                profileRepository.setActiveProfile(newProfile)
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }

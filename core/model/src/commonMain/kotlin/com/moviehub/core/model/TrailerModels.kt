@@ -1,5 +1,8 @@
 package com.moviehub.core.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class TrailerPlaybackSource(
     val videoUrl: String,
     val audioUrl: String? = null,

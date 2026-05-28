@@ -11,11 +11,18 @@ import kotlinx.coroutines.internal.synchronized
  */
 @OptIn(InternalCoroutinesApi::class)
 object MediaItemStore {
+    private const val MAX_ENTRIES = 100
     @OptIn(InternalCoroutinesApi::class)
     private val lock = SynchronizedObject()
     private val items = mutableMapOf<String, MediaItem>()
 
-    fun put(id: String, item: MediaItem) = synchronized(lock) { items[id] = item }
+    fun put(id: String, item: MediaItem) = synchronized(lock) {
+        items[id] = item
+        if (items.size > MAX_ENTRIES) {
+            val oldestKey = items.keys.firstOrNull()
+            if (oldestKey != null) items.remove(oldestKey)
+        }
+    }
 
     fun get(id: String): MediaItem? = synchronized(lock) { items[id] }
 

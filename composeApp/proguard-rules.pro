@@ -21,9 +21,13 @@
 # Keep QuickJS if we add plugin support
 -keep class com.nuvio.app.features.plugins.** { *; }
 
-# General ProGuard hardening
--optimizationpasses 5
+# General R8 hardening
 -dontusemixedcaseclassnames
 -dontskipnonpubliclibraryclasses
--dontpreverify
 -verbose
+
+# Strip verbose/debug Kermit logs in release
+-assumenosideeffects class co.touchlab.kermit.Logger {
+    public void v(...);
+    public void d(...);
+}

@@ -1,0 +1,77 @@
+# Baseline Profile — MovieHub critical startup paths
+# Auto-generated for AOT compilation to improve cold start by ~30%
+# Format: HSP (hierarchical startup profile) or HEL (hierarchical execution list)
+
+# ── Application entry ──────────────────────────────────────────────
+HSPL com.sumit.moviehub.MainActivity
+HSPL com.sumit.moviehub.App
+
+# ── Navigation ─────────────────────────────────────────────────────
+HSPL com.moviehub.navigation.RootNavGraph
+HSPL com.moviehub.navigation.NavGraphKt
+
+# ── Theme ──────────────────────────────────────────────────────────
+HSPL com.moviehub.core.ui.theme.MovieHubTheme
+HSPL com.moviehub.core.ui.theme.MovieHubColors
+HSPL com.moviehub.core.ui.theme.AccentType
+HSPL com.moviehub.core.ui.theme.ThemeType
+
+# ── Koin DI ────────────────────────────────────────────────────────
+HSPL org.koin.core.context.KoinContext
+HSPL org.koin.core.Koin
+HSPL org.koin.core.module.Module
+HSPL org.koin.dsl.module
+HSPL org.koin.compose.koinInject
+HSPL com.moviehub.di.KoinKt
+HSPL com.moviehub.di.KoinKt$appModules
+
+# ── Home screen ────────────────────────────────────────────────────
+HSPL com.moviehub.feature.home.presentation.HomeScreen
+HSPL com.moviehub.feature.home.presentation.HomeViewModel
+HSPL com.moviehub.feature.home.presentation.CatalogViewModel
+HSPL com.moviehub.feature.home.presentation.HomeRepositoryImpl
+HSPL com.moviehub.feature.home.data.HomeRepositoryImpl
+
+# ── Details screen ─────────────────────────────────────────────────
+HSPL com.moviehub.feature.details.presentation.DetailsScreen
+HSPL com.moviehub.feature.details.presentation.DetailsViewModel
+HSPL com.moviehub.feature.details.presentation.StreamsScreen
+HSPL com.moviehub.feature.details.data.DetailsRepositoryImpl
+
+# ── Player ─────────────────────────────────────────────────────────
+HSPL com.moviehub.feature.player.presentation.PlayerScreen
+HSPL com.moviehub.feature.player.presentation.VideoPlayer
+HSPL com.moviehub.feature.player.presentation.components.PlayerControls
+
+# ── Kamel image loading ────────────────────────────────────────────
+HSPL io.kamel.core.config.KamelConfig
+HSPL io.kamel.image.config.Default
+HSPL io.kamel.image.asyncPainter
+
+# ── Database (Room) ────────────────────────────────────────────────
+HSPL com.moviehub.core.database.MovieDatabase
+HSPL com.moviehub.core.database.MovieDatabaseFactory
+HSPL com.moviehub.core.database.ProfileRepository
+HSPL com.moviehub.core.database.UserPreferencesDao
+HSPL com.moviehub.core.database.CacheService
+
+# ── Networking ─────────────────────────────────────────────────────
+HSPL io.ktor.client.HttpClient
+HSPL io.ktor.client.HttpClientKt
+HSPL io.ktor.client.engine.android.Android
+HSPL okhttp3.OkHttpClient
+HSPL com.moviehub.core.network.StremioApiClient
+HSPL com.moviehub.core.network.AddonManager
+
+# ── Kotlinx ────────────────────────────────────────────────────────
+HSPL kotlinx.coroutines.CoroutineScope
+HSPL kotlinx.coroutines.Dispatchers
+HSPL kotlinx.serialization.json.Json
+HSPL kotlinx.serialization.json.JsonImpl
+
+# ── Media3 / ExoPlayer ─────────────────────────────────────────────
+HSPL androidx.media3.exoplayer.ExoPlayer
+HSPL androidx.media3.exoplayer.ExoPlayer$Builder
+HSPL androidx.media3.common.Player
+HSPL androidx.media3.common.MediaItem
+HSPL androidx.media3.datasource.DefaultHttpDataSource

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import com.moviehub.core.utils.PerformanceMonitor
 
 class DetailsViewModel(
     private val repository: DetailsRepository,
@@ -52,124 +53,139 @@ class DetailsViewModel(
             return
         }
         viewModelScope.launch {
-            _state.value = _state.value.copy(
-                isLoading = true,
-                error = null,
-            )
-
+            PerformanceMonitor.beginSection("VM:Details:loadDetails")
             try {
-                // Sync TMDB API key before loading
-                val tmdbKey = tmdbSettingsRepository.getApiKey()
-                val isTmdbConfig = tmdbKey.isNotBlank()
-                if (isTmdbConfig) {
-                    tmdbService.setApiKey(tmdbKey)
-                }
-                _state.value = _state.value.copy(isTmdbConfigured = isTmdbConfig)
-
-                // 1. Fetch Metadata
-                val details = repository.getMediaDetails(id, type, addonUrl)
-
                 _state.value = _state.value.copy(
-                    isLoading = false,
-                    mediaItem = details,
-                    error = if (details == null) "Failed to load details" else null
+                    isLoading = true,
+                    error = null,
                 )
 
-                if (details != null) {
-                    val profileId = profileRepository.activeProfile.value?.id
-                    if (profileId != null) {
-                        try {
-                            val isFav = favoriteDao.getFavoriteById(id, profileId)
-                            val progress = watchProgressDao.getProgress(id, profileId).firstOrNull()
-                            val percent = if (progress != null && progress.durationMs > 0) {
-                                (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
-                            } else 0f
-                            _state.value = _state.value.copy(
-                                isFavorite = isFav != null,
-                                isWatched = progress?.isWatched == true,
-                                isInProgress = progress != null && !progress.isWatched && progress.progressMs > 0,
-                                watchProgressPercent = percent,
-                            )
-                        } catch (e: Exception) {
-                            // Non-critical: favorite/progress lookup failure shouldn't block details
-                        }
+                try {
+                    // Sync TMDB API key before loading
+                    val tmdbKey = tmdbSettingsRepository.getApiKey()
+                    val isTmdbConfig = tmdbKey.isNotBlank()
+                    if (isTmdbConfig) {
+                        tmdbService.setApiKey(tmdbKey)
                     }
+                    _state.value = _state.value.copy(isTmdbConfigured = isTmdbConfig)
 
-                    // 2. Fallback trailer search if empty
-                    if (details.trailers.isEmpty()) {
-                        launch {
+                    // 1. Fetch Metadata
+                    val details = repository.getMediaDetails(id, type, addonUrl)
+
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        mediaItem = details,
+                        error = if (details == null) "Failed to load details" else null
+                    )
+
+                    if (details != null) {
+                        val profileId = profileRepository.activeProfile.value?.id
+                        if (profileId != null) {
                             try {
-                                val searchTitle = details.title
-                                val year = details.releaseInfo?.take(4) ?: ""
-                                val query = "$searchTitle $year official trailer"
-                                val ytId = ytResolver.searchTrailer(query)
-                                if (ytId != null) {
-                                    val currentMediaItem = _state.value.mediaItem
-                                    if (currentMediaItem != null && currentMediaItem.id == details.id) {
-                                        _state.value = _state.value.copy(
-                                            mediaItem = currentMediaItem.copy(
-                                                trailers = listOf(
-                                                    com.moviehub.core.model.MediaTrailer(
-                                                        id = ytId,
-                                                        url = ytId,
-                                                        name = "Official Trailer",
-                                                        type = "Trailer"
+                                val isFav = favoriteDao.getFavoriteById(id, profileId)
+                                val progress = watchProgressDao.getProgress(id, profileId).firstOrNull()
+                                val percent = if (progress != null && progress.durationMs > 0) {
+                                    (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
+                                } else 0f
+                                _state.value = _state.value.copy(
+                                    isFavorite = isFav != null,
+                                    isWatched = progress?.isWatched == true,
+                                    isInProgress = progress != null && !progress.isWatched && progress.progressMs > 0,
+                                    watchProgressPercent = percent,
+                                )
+                            } catch (e: Exception) {
+                                // Non-critical: favorite/progress lookup failure shouldn't block details
+                            }
+                        }
+
+                        // 2. Fallback trailer search if empty
+                        if (details.trailers.isEmpty()) {
+                            launch {
+                                try {
+                                    val searchTitle = details.title
+                                    val year = details.releaseInfo?.take(4) ?: ""
+                                    val query = "$searchTitle $year official trailer"
+                                    val ytId = ytResolver.searchTrailer(query)
+                                    if (ytId != null) {
+                                        val currentMediaItem = _state.value.mediaItem
+                                        if (currentMediaItem != null && currentMediaItem.id == details.id) {
+                                            _state.value = _state.value.copy(
+                                                mediaItem = currentMediaItem.copy(
+                                                    trailers = listOf(
+                                                        com.moviehub.core.model.MediaTrailer(
+                                                            id = ytId,
+                                                            url = ytId,
+                                                            name = "Official Trailer",
+                                                            type = "Trailer"
+                                                        )
                                                     )
                                                 )
                                             )
-                                        )
+                                        }
                                     }
+                                } catch (e: Exception) {
+                                    // Non-critical: trailer search failure is fine
                                 }
-                            } catch (e: Exception) {
-                                // Non-critical: trailer search failure is fine
                             }
                         }
                     }
+                } catch (e: Exception) {
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = "Failed to load details: ${e.message}"
+                    )
                 }
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    error = "Failed to load details: ${e.message}"
-                )
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }
 
     private fun loadStreams(id: String, type: String) {
         viewModelScope.launch {
-            val totalAddons = repository.getStreamAddonCount(type)
-            _state.value = _state.value.copy(
-                isSearchingStreams = true,
-                totalStreamAddons = totalAddons,
-                processedStreamAddons = 0
-            )
-
+            PerformanceMonitor.beginSection("VM:Details:loadStreams")
             try {
-                var processedCount = 0
-                repository.getStreamsFlow(id, type).collect { partialStreams ->
-                    processedCount++
-                    val sorted = partialStreams.sortedByDescending { it.name?.contains("4K", ignoreCase = true) == true }
-                    _state.value = _state.value.copy(
-                        streams = sorted,
-                        processedStreamAddons = processedCount.coerceAtMost(totalAddons)
-                    )
+                val totalAddons = repository.getStreamAddonCount(type)
+                _state.value = _state.value.copy(
+                    isSearchingStreams = true,
+                    totalStreamAddons = totalAddons,
+                    processedStreamAddons = 0
+                )
+
+                try {
+                    var processedCount = 0
+                    repository.getStreamsFlow(id, type).collect { partialStreams ->
+                        processedCount++
+                        val sorted = partialStreams.sortedByDescending { it.playbackPriority }
+                        _state.value = _state.value.copy(
+                            streams = sorted,
+                            processedStreamAddons = processedCount.coerceAtMost(totalAddons)
+                        )
+                    }
+                } catch (e: Exception) {
+                    _state.value = _state.value.copy(streamsError = e.message)
+                } finally {
+                    _state.value = _state.value.copy(isSearchingStreams = false)
                 }
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(streamsError = e.message)
             } finally {
-                _state.value = _state.value.copy(isSearchingStreams = false)
+                PerformanceMonitor.endSection()
             }
         }
     }
 
     private fun loadTrailer(videoId: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isResolvingTrailer = true)
-            val source = ytResolver.resolveFromYouTubeId(videoId)
-            _state.value = _state.value.copy(
-                isResolvingTrailer = false,
-                selectedTrailerSource = source
-            )
+            PerformanceMonitor.beginSection("VM:Details:loadTrailer")
+            try {
+                _state.value = _state.value.copy(isResolvingTrailer = true)
+                val source = ytResolver.resolveFromYouTubeId(videoId)
+                _state.value = _state.value.copy(
+                    isResolvingTrailer = false,
+                    selectedTrailerSource = source
+                )
+            } finally {
+                PerformanceMonitor.endSection()
+            }
         }
     }
 
@@ -179,72 +195,85 @@ class DetailsViewModel(
      */
     private fun refreshLocalState() {
         viewModelScope.launch {
-            val mediaItem = _state.value.mediaItem ?: return@launch
-            val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+            PerformanceMonitor.beginSection("VM:Details:refreshLocalState")
             try {
-                val isFav = favoriteDao.getFavoriteById(mediaItem.id, profileId)
-                val progress = watchProgressDao.getProgress(mediaItem.id, profileId).firstOrNull()
-                val percent = if (progress != null && progress.durationMs > 0) {
-                    (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
-                } else 0f
-                _state.value = _state.value.copy(
-                    isFavorite = isFav != null,
-                    isWatched = progress?.isWatched == true,
-                    isInProgress = progress != null && !progress.isWatched && progress.progressMs > 0,
-                    watchProgressPercent = percent,
-                )
-            } catch (e: Exception) { }
+                val mediaItem = _state.value.mediaItem ?: return@launch
+                val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                try {
+                    val isFav = favoriteDao.getFavoriteById(mediaItem.id, profileId)
+                    val progress = watchProgressDao.getProgress(mediaItem.id, profileId).firstOrNull()
+                    val percent = if (progress != null && progress.durationMs > 0) {
+                        (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
+                    } else 0f
+                    _state.value = _state.value.copy(
+                        isFavorite = isFav != null,
+                        isWatched = progress?.isWatched == true,
+                        isInProgress = progress != null && !progress.isWatched && progress.progressMs > 0,
+                        watchProgressPercent = percent,
+                    )
+                } catch (e: Exception) { }
+            } finally {
+                PerformanceMonitor.endSection()
+            }
         }
     }
 
     private fun toggleWatched() {
         viewModelScope.launch {
-            val mediaItem = _state.value.mediaItem ?: return@launch
-            val profileId = profileRepository.activeProfile.value?.id ?: return@launch
-            val current = _state.value.isWatched
+            PerformanceMonitor.beginSection("VM:Details:toggleWatched")
+            try {
+                val mediaItem = _state.value.mediaItem ?: return@launch
+                val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                val current = _state.value.isWatched
 
-            if (current) {
-                // Remove from Continue Watching → delete all stored data (position + track prefs)
-                watchProgressDao.deleteProgress(mediaItem.id, profileId)
-                _state.value = _state.value.copy(isWatched = false, isInProgress = false, watchProgressPercent = 0f)
-            } else {
-                // Mark as watched → delete stored data, then insert minimal watched marker
-                watchProgressDao.deleteProgress(mediaItem.id, profileId)
-                watchProgressDao.insertOrUpdate(
-                    WatchProgress(
-                        mediaId = mediaItem.id,
-                        profileId = profileId,
-                        type = if (mediaItem.type.name == "SHOW") "series" else "movie",
-                        progressMs = 0,
-                        durationMs = mediaItem.runtime?.let { parseRuntime(it) } ?: 0L,
-                        isWatched = true
+                if (current) {
+                    watchProgressDao.deleteProgress(mediaItem.id, profileId)
+                    _state.value = _state.value.copy(isWatched = false, isInProgress = false, watchProgressPercent = 0f)
+                } else {
+                    watchProgressDao.deleteProgress(mediaItem.id, profileId)
+                    watchProgressDao.insertOrUpdate(
+                        WatchProgress(
+                            mediaId = mediaItem.id,
+                            profileId = profileId,
+                            type = if (mediaItem.type.name == "SHOW") "series" else "movie",
+                            progressMs = 0,
+                            durationMs = mediaItem.runtime?.let { parseRuntime(it) } ?: 0L,
+                            isWatched = true
+                        )
                     )
-                )
-                _state.value = _state.value.copy(isWatched = true, isInProgress = false, watchProgressPercent = 0f)
+                    _state.value = _state.value.copy(isWatched = true, isInProgress = false, watchProgressPercent = 0f)
+                }
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }
 
     private fun toggleFavorite() {
         viewModelScope.launch {
-            val mediaItem = _state.value.mediaItem ?: return@launch
-            val profileId = profileRepository.activeProfile.value?.id ?: return@launch
-            val current = _state.value.isFavorite
+            PerformanceMonitor.beginSection("VM:Details:toggleFavorite")
+            try {
+                val mediaItem = _state.value.mediaItem ?: return@launch
+                val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                val current = _state.value.isFavorite
 
-            if (current) {
-                favoriteDao.deleteFavoriteById(mediaItem.id, profileId)
-                _state.value = _state.value.copy(isFavorite = false)
-            } else {
-                favoriteDao.insertFavorite(
-                    FavoriteEntity(
-                        contentId = mediaItem.id,
-                        profileId = profileId,
-                        contentType = if (mediaItem.type.name == "SHOW") DbContentType.SHOW else DbContentType.MOVIE,
-                        title = mediaItem.title,
-                        posterUrl = mediaItem.posterUrl,
+                if (current) {
+                    favoriteDao.deleteFavoriteById(mediaItem.id, profileId)
+                    _state.value = _state.value.copy(isFavorite = false)
+                } else {
+                    favoriteDao.insertFavorite(
+                        FavoriteEntity(
+                            contentId = mediaItem.id,
+                            profileId = profileId,
+                            contentType = if (mediaItem.type.name == "SHOW") DbContentType.SHOW else DbContentType.MOVIE,
+                            title = mediaItem.title,
+                            posterUrl = mediaItem.posterUrl,
+                        )
                     )
-                )
-                _state.value = _state.value.copy(isFavorite = true)
+                    _state.value = _state.value.copy(isFavorite = true)
+                }
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }

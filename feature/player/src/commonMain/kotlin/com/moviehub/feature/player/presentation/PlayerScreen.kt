@@ -139,6 +139,7 @@ fun PlayerScreen(
     val watchHistoryDao: WatchHistoryDao = koinInject()
     val profileRepository: ProfileRepository = koinInject()
     val userPreferencesDao: UserPreferencesDao = koinInject()
+    val torrentResolver: com.moviehub.core.network.torrent.HybridStreamResolver = koinInject()
 
     var seekIncrement by remember { mutableStateOf(10) }
     var seekIndicatorText by remember { mutableStateOf<String?>(null) }
@@ -147,6 +148,26 @@ fun PlayerScreen(
 
     val streamUrl = activeStream.url ?: activeStream.externalUrl ?: ""
     val headers = activeStream.behaviorHints.proxyHeaders?.request ?: emptyMap()
+
+    // Resolve torrent streams: Debrid → P2P fallback
+    var torrentResolvedForHash by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(activeStream, torrentResolvedForHash) {
+        if (activeStream.isTorrentStream && activeStream.infoHash != null && torrentResolvedForHash != activeStream.infoHash) {
+            torrentResolvedForHash = activeStream.infoHash
+            val result = torrentResolver.resolve(activeStream)
+            when (result) {
+                is com.moviehub.core.network.torrent.ResolveResult.Direct -> {
+                    if (result.stream.url != activeStream.url) activeStream = result.stream
+                }
+                is com.moviehub.core.network.torrent.ResolveResult.P2p -> {
+                    activeStream = result.stream
+                }
+                is com.moviehub.core.network.torrent.ResolveResult.Unavailable -> {
+                    // Leave active stream as-is — player error state will show
+                }
+            }
+        }
+    }
 
     // Sort streams with active one first
     val sortedStreams = remember(streams, activeStream) {

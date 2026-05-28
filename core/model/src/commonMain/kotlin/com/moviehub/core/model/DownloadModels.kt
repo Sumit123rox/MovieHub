@@ -1,7 +1,9 @@
 package com.moviehub.core.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 enum class DownloadState {
     QUEUED,
@@ -11,6 +13,7 @@ enum class DownloadState {
     PAUSED
 }
 
+@Immutable
 @Serializable
 data class DownloadItem(
     val id: String,

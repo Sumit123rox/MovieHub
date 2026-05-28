@@ -48,6 +48,7 @@ import platform.AVFoundation.accessLog
 import platform.UIKit.UIScreen
 import com.moviehub.core.model.SubtitleStyle
 import com.moviehub.core.model.VideoScale
+import platform.AVKit.AVPictureInPictureController
 import platform.AVFoundation.canUseNetworkResourcesForLiveStreamingWhilePaused
 import platform.AVFoundation.preferredForwardBufferDuration
 import platform.AVFoundation.preferredPeakBitRate
@@ -104,6 +105,9 @@ actual fun VideoPlayer(
             }
         }
     }
+
+    // AVPictureInPictureController for iOS PiP support
+    var pipController by remember { mutableStateOf<AVPictureInPictureController?>(null) }
 
     // Efficient position updates using native periodic observer
     DisposableEffect(player) {
@@ -222,6 +226,16 @@ actual fun VideoPlayer(
                             audioBitrate = audioBitrate
                         )
                     )
+
+                    // Update Now Playing info for lock screen / control center
+                    val info = mutableMapOf<Any?, Any>()
+                    info[platform.MediaPlayer.MPMediaItemPropertyTitle] = "MovieHub"
+                    if (avDuration > 0) {
+                        info[platform.MediaPlayer.MPMediaItemPropertyPlaybackDuration] = avDuration
+                        info[platform.MediaPlayer.MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+                    }
+                    info[platform.MediaPlayer.MPNowPlayingInfoPropertyPlaybackRate] = if (isCurrentlyPlaying) 1.0 else 0.0
+                    platform.MediaPlayer.MPNowPlayingInfoCenter.defaultCenter().nowPlayingInfo = info
                 }
             )
         } else {
@@ -240,6 +254,8 @@ actual fun VideoPlayer(
             if (observer != null && p != null) {
                 p.removeTimeObserver(observer)
             }
+            pipController?.stopPictureInPicture()
+            pipController = null
         }
     }
 
@@ -285,8 +301,68 @@ actual fun VideoPlayer(
                 is PlayerAction.ResetZoom -> {
                     // Handled via freeZoomScale/freeZoomOffset state in PlayerScreen
                 }
+                is PlayerAction.EnterPip -> {
+                    if (AVPictureInPictureController.isPictureInPictureSupported()) {
+                        val pip = pipController ?: run {
+                            AVPictureInPictureController(playerLayer = playerLayer).also { pipController = it }
+                        }
+                        pip.startPictureInPicture()
+                    }
+                }
             }
             onActionConsumed()
+        }
+    }
+
+    // Setup Now Playing info center + remote commands for lock screen / control center
+    DisposableEffect(player) {
+        val p = player
+        if (p != null) {
+            val nowPlayingInfo = mutableMapOf<Any?, Any>()
+            val commandCenter = platform.MediaPlayer.MPRemoteCommandCenter.sharedCommandCenter()
+
+            commandCenter.playCommand.addTargetWithHandler { _ ->
+                p.play()
+                platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
+            }
+            commandCenter.pauseCommand.addTargetWithHandler { _ ->
+                p.pause()
+                platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
+            }
+            commandCenter.skipForwardCommand.preferredIntervals = listOf(10)
+            commandCenter.skipForwardCommand.addTargetWithHandler { event ->
+                val skipEvent = event as? platform.MediaPlayer.MPSkipIntervalCommandEvent
+                val interval = skipEvent?.interval ?: 10.0
+                val newTime = (platform.CoreMedia.CMTimeGetSeconds(p.currentTime() ?: platform.CoreMedia.CMTimeMake(0, 1)) + interval)
+                p.seekToTime(CMTimeMakeWithSeconds(newTime, 1000))
+                platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
+            }
+            commandCenter.skipBackwardCommand.preferredIntervals = listOf(10)
+            commandCenter.skipBackwardCommand.addTargetWithHandler { event ->
+                val skipEvent = event as? platform.MediaPlayer.MPSkipIntervalCommandEvent
+                val interval = skipEvent?.interval ?: 10.0
+                val newTime = (platform.CoreMedia.CMTimeGetSeconds(p.currentTime() ?: platform.CoreMedia.CMTimeMake(0, 1)) - interval).coerceAtLeast(0.0)
+                p.seekToTime(CMTimeMakeWithSeconds(newTime, 1000))
+                platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
+            }
+            commandCenter.changePlaybackPositionCommand.addTargetWithHandler { event ->
+                val posEvent = event as? platform.MediaPlayer.MPChangePlaybackPositionCommandEvent
+                if (posEvent != null) {
+                    p.seekToTime(CMTimeMakeWithSeconds(posEvent.positionTime, 1000))
+                }
+                platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
+            }
+
+            onDispose {
+                commandCenter.playCommand.removeTarget(null)
+                commandCenter.pauseCommand.removeTarget(null)
+                commandCenter.skipForwardCommand.removeTarget(null)
+                commandCenter.skipBackwardCommand.removeTarget(null)
+                commandCenter.changePlaybackPositionCommand.removeTarget(null)
+                platform.MediaPlayer.MPNowPlayingInfoCenter.defaultCenter().nowPlayingInfo = null
+            }
+        } else {
+            onDispose { }
         }
     }
 

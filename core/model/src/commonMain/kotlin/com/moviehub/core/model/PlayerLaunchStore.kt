@@ -17,6 +17,7 @@ data class PlayerLaunch(
 
 @OptIn(InternalCoroutinesApi::class)
 object PlayerLaunchStore {
+    private const val MAX_ENTRIES = 10
     private val lock = SynchronizedObject()
     private var nextLaunchId = 1L
     private val launches = mutableMapOf<Long, PlayerLaunch>()
@@ -24,6 +25,10 @@ object PlayerLaunchStore {
     fun put(launch: PlayerLaunch): Long = synchronized(lock) {
         val launchId = nextLaunchId++
         launches[launchId] = launch
+        if (launches.size > MAX_ENTRIES) {
+            val oldestKey = launches.keys.minOrNull()
+            if (oldestKey != null) launches.remove(oldestKey)
+        }
         launchId
     }
 

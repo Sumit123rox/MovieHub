@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import com.moviehub.core.utils.PerformanceMonitor
 
 class CatalogViewModel(
     private val repository: HomeRepository,
@@ -51,20 +52,25 @@ class CatalogViewModel(
 
     fun loadCatalog(type: String, catalogId: String, addonId: String?) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null)
+            PerformanceMonitor.beginSection("VM:Catalog:loadCatalog")
             try {
-                val fetched = repository.getCatalog(type, catalogId, addonId, skip = 0)
-                allFetchedItems = fetched
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    displayedItems = fetched.take(pageSize),
-                    canPaginate = fetched.isNotEmpty()
-                )
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    error = e.message ?: "Failed to load catalog"
-                )
+                _state.value = _state.value.copy(isLoading = true, error = null)
+                try {
+                    val fetched = repository.getCatalog(type, catalogId, addonId, skip = 0)
+                    allFetchedItems = fetched
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        displayedItems = fetched.take(pageSize),
+                        canPaginate = fetched.isNotEmpty()
+                    )
+                } catch (e: Exception) {
+                    _state.value = _state.value.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to load catalog"
+                    )
+                }
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }
@@ -76,6 +82,7 @@ class CatalogViewModel(
         _state.value = currentState.copy(isPaginating = true)
 
         viewModelScope.launch {
+            PerformanceMonitor.beginSection("VM:Catalog:loadMore")
             try {
                 if (_state.value.displayedItems.size < allFetchedItems.size) {
                     val nextSize = (_state.value.displayedItems.size + pageSize).coerceAtMost(allFetchedItems.size)
@@ -110,6 +117,8 @@ class CatalogViewModel(
                     canPaginate = false,
                     error = e.message ?: "Failed to load more items"
                 )
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }

@@ -24,6 +24,7 @@ kotlin {
             implementation(project(":core:model"))
             implementation(project(":core:network"))
             implementation(project(":core:database"))
+            implementation(project(":core:utils"))
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
@@ -33,6 +34,8 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
+            implementation(libs.compose.material.icons.core)
+            implementation(libs.compose.material.icons.extended)
         }
     }
 }

@@ -13,11 +13,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.Profile
+import com.moviehub.core.ui.text.nativeTextFieldImeOptions
 
 @Composable
 fun ProfileScreen(
@@ -161,6 +164,7 @@ fun AddProfileItem(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CreateProfileDialog(
     onDismiss: () -> Unit,
@@ -179,7 +183,8 @@ fun CreateProfileDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(platformImeOptions = nativeTextFieldImeOptions())
                 )
 
                 if (canClone) {

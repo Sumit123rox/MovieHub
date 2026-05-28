@@ -1,12 +1,15 @@
 package com.moviehub.di
 
 import com.moviehub.core.database.CacheService
+import com.moviehub.core.database.MediaFtsDao
+import com.moviehub.core.database.MediaFtsDaoImpl
 import com.moviehub.core.database.MovieDatabase
 import com.moviehub.core.database.MovieDatabaseFactory
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.TmdbSettingsRepository
 import com.moviehub.core.network.AddonManager
 import com.moviehub.core.network.DownloadsRepository
+import com.moviehub.core.network.NetworkConnectivityMonitor
 import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.scraper.PluginRepository
 import com.moviehub.core.network.scraper.ScraperManager
@@ -64,6 +67,8 @@ val databaseModule = module {
     single { get<MovieDatabase>().addonDao() }
     single { ProfileRepository(get()) }
     single { TmdbSettingsRepository(get(), get()) }
+    single { com.moviehub.core.database.DebridSettingsRepository(get(), get()) }
+    single<MediaFtsDao> { MediaFtsDaoImpl(get()) }
     single { CacheService(get(), appJson) }
 }
 
@@ -81,9 +86,13 @@ val networkModule = module {
     }
     single { AddonManager(get(), get()) }
     single { DownloadsRepository(get(), get(), get()) }
-    single { SyncManager(get(), get(), get(), get(), get(), get()) }
+    single { NetworkConnectivityMonitor(get()) }
+    single { SyncManager(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { com.moviehub.core.network.NetworkDispatchers() }
     single { com.moviehub.core.network.CatalogPrefetcher(get(), get(), get(), get(), appJson) }
+    single { com.moviehub.core.network.DeduplicatingCache() }
+    single { com.moviehub.core.network.debrid.RealDebridClient(get(), get()) }
+    single { com.moviehub.core.network.torrent.HybridStreamResolver(get(), get(), get()) }
 
     single {
         HttpClient {
@@ -113,7 +122,7 @@ val networkModule = module {
             }
         }
     }
-    single { StremioApiClient(get(), get()) }
+    single { StremioApiClient(get(), get(), get()) }
     single { ScraperManager(get()) }
     single { PluginRepository(get(), get(), get(), get()) }
     single { com.moviehub.core.network.YouTubePlaybackResolver(get()) }
@@ -128,7 +137,7 @@ val homeModule = module {
 }
 
 val searchModule = module {
-    single<SearchRepository> { SearchRepositoryImpl(get(), get()) }
+    single<SearchRepository> { SearchRepositoryImpl(get(), get(), get()) }
     viewModel { SearchViewModel(get(), get(), get()) }
 }
 
@@ -141,6 +150,10 @@ val addonModule = module {
 val detailsModule = module {
     single<DetailsRepository> { DetailsRepositoryImpl(get(), get(), get(), get(), get(), appJson) }
     viewModel { DetailsViewModel(get(), get(), get(), get(), get(), get(), get()) }
+}
+
+val syncModule = module {
+    viewModel { com.moviehub.feature.sync.presentation.SyncViewModel(get()) }
 }
 
 val authModule = module {
@@ -156,6 +169,7 @@ fun appModules(): List<Module> = listOf(
     searchModule,
     addonModule,
     detailsModule,
+    syncModule,
     authModule,
     profileModule
 )

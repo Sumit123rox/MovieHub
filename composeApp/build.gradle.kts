@@ -30,6 +30,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.desugar.jdk.libs)
+            implementation(libs.androidx.profileinstaller)
         }
         commonMain.dependencies {
             implementation(project(":navigation"))
@@ -91,4 +92,5 @@ dependencies {
     // coreLibraryDesugaring(libs.desugar.jdk.libs) // REMOVED to resolve DEX merging conflict
     implementation(libs.multidex)
     debugImplementation(libs.compose.uiTooling)
+    debugImplementation(libs.leakcanary.android)
 }

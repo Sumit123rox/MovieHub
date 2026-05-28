@@ -1,7 +1,9 @@
 package com.moviehub.core.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class AudioTrack(
     val index: Int,
@@ -11,6 +13,7 @@ data class AudioTrack(
     val isSelected: Boolean = false
 )
 
+@Immutable
 @Serializable
 data class SubtitleTrack(
     val index: Int,
@@ -22,6 +25,7 @@ data class SubtitleTrack(
 )
 
 @Serializable
+@Immutable
 data class PlayerPlaybackState(
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
@@ -44,12 +48,14 @@ data class PlayerPlaybackState(
     val chapters: List<ChapterInfo> = emptyList()
 )
 
+@Immutable
 data class ChapterInfo(
     val title: String,
     val startMs: Long,
     val endMs: Long
 )
 
+@Immutable
 enum class VideoScale(val label: String) {
     FIT("Fit"),
     FILL("Fill"),
@@ -57,6 +63,7 @@ enum class VideoScale(val label: String) {
     STRETCH("Stretch")
 }
 
+@Immutable
 data class SubtitleStyle(
     val fontSizeSp: Int = 16,
     val fontColorArgb: Int = -1,

@@ -8,6 +8,7 @@ import com.moviehub.core.database.WatchProgressDao
 import com.moviehub.core.model.ContinueWatchingItem
 import com.moviehub.feature.home.data.HomeRepository
 import com.moviehub.core.network.AddonManager
+import com.moviehub.core.utils.PerformanceMonitor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.debounce
 
 class HomeViewModel(
     private val repository: HomeRepository,
@@ -43,7 +45,7 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 var lastLoadedAddons: List<com.moviehub.core.model.StremioManifest>? = null
-                addonManager.installedAddons.collect { addons ->
+                addonManager.installedAddons.debounce(5000).collect { addons ->
                     try {
                         _state.value = _state.value.copy(installedAddons = addons)
 
@@ -194,6 +196,8 @@ class HomeViewModel(
     }
 
     private suspend fun loadDynamicCatalogs(addons: List<com.moviehub.core.model.StremioManifest>) {
+        PerformanceMonitor.beginSection("HomeVM.loadCatalogs")
+        PerformanceMonitor.counter("HomeVM.catalogCount", addons.sumOf { it.catalogs.size }.toLong())
         try {
             // Show shimmer immediately — prevents empty-state text from flashing
             // during the gap between addon detection and cache query completion
@@ -283,6 +287,8 @@ class HomeViewModel(
                 hasMoreSections = false,
                 error = if (_state.value.dynamicSections.isEmpty()) e.message ?: "Failed to load catalogs" else null
             )
+        } finally {
+            PerformanceMonitor.endSection()
         }
     }
 
@@ -322,11 +328,26 @@ class HomeViewModel(
             }.awaitAll().filterNotNull()
         }
 
-        if (networkSections.isNotEmpty()) {
+        // Deduplicate by display key (catalogName, type) — different addons may expose
+        // catalogs with the same display name but different catalog IDs, causing duplicates
+        val deduped = networkSections
+            .groupBy { "${it.catalogName.trim().lowercase()}_${it.type}" }
+            .map { (_, group) ->
+                val first = group.first()
+                val mergedItems = group.flatMap { it.items }.distinctBy { it.id }
+                val uniqueAddons = group.map { it.addonName }.distinct()
+                first.copy(
+                    items = mergedItems,
+                    addonId = if (uniqueAddons.size == 1) first.addonId else "multi_addons",
+                    addonName = if (uniqueAddons.size == 1) uniqueAddons.first() else "Multiple Providers"
+                )
+            }
+
+        if (deduped.isNotEmpty()) {
             val currentSections = _state.value.dynamicSections.toMutableList()
             val existingKeys = currentSections.map { "${it.catalogName.trim().lowercase()}_${it.type}" }.toSet()
             // Update existing sections in place — keeps their position unchanged
-            networkSections.forEach { section ->
+            deduped.forEach { section ->
                 val key = "${section.catalogName.trim().lowercase()}_${section.type}"
                 val existingIndex = currentSections.indexOfFirst {
                     "${it.catalogName.trim().lowercase()}_${it.type}" == key
@@ -336,9 +357,14 @@ class HomeViewModel(
                 }
             }
             // Append completely new sections at the end (preserves insertion order)
-            val newSections = networkSections.filter { "${it.catalogName.trim().lowercase()}_${it.type}" !in existingKeys }
+            val newSections = deduped.filter { "${it.catalogName.trim().lowercase()}_${it.type}" !in existingKeys }
             currentSections.addAll(newSections)
-            _state.value = _state.value.copy(dynamicSections = currentSections)
+            // Cap at 30 to bound memory growth
+            if (currentSections.size > 30) {
+                _state.value = _state.value.copy(dynamicSections = currentSections.take(30))
+            } else {
+                _state.value = _state.value.copy(dynamicSections = currentSections)
+            }
         }
     }
 
@@ -352,7 +378,7 @@ class HomeViewModel(
         if (sections.isEmpty()) return Pair(emptyList(), emptyList())
 
         val featuredSection = sections.find { it.items.size >= 10 } ?: sections.find { it.items.size >= 5 } ?: sections.firstOrNull()
-        val featured = featuredSection?.items?.take(10)?.shuffled() ?: emptyList()
+        val featured = featuredSection?.items?.take(10) ?: emptyList()
         val featuredIds = featured.map { it.id }.toSet()
 
         val groupedSections = sections.groupBy { "${it.catalogName.trim().lowercase()}_${it.type}" }

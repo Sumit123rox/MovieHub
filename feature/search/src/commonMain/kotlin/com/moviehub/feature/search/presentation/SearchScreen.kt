@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.moviehub.core.ui.components.ContentCard
 import com.moviehub.core.ui.components.Poster
 import com.moviehub.core.ui.components.VerticalGrid
+import com.moviehub.core.ui.text.nativeTextFieldImeOptions
 import com.moviehub.core.ui.components.shimmerEffect
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +47,7 @@ import moviehub.core.ui.generated.resources.search_hint
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SearchScreen(
     onMediaClick: (id: String, type: String) -> Unit,
@@ -92,7 +95,8 @@ fun SearchScreen(
                         onSearch = { viewModel.onAction(SearchAction.PerformSearch) }
                     ),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Search
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                        platformImeOptions = nativeTextFieldImeOptions()
                     )
                 )
             }

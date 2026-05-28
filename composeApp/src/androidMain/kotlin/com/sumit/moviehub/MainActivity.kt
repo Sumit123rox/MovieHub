@@ -5,12 +5,14 @@ import android.os.StrictMode
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.core.utils.initKoin
 import com.moviehub.di.appModules
 import org.koin.android.ext.koin.androidContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        PerformanceMonitor.beginSection("MainActivity.onCreate")
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
@@ -22,9 +24,11 @@ class MainActivity : ComponentActivity() {
         // Permit disk reads during startup for library initialization (Koin/Ktor/Reflection)
         val oldPolicy = StrictMode.allowThreadDiskReads()
         try {
+            PerformanceMonitor.beginSection("Koin.init")
             initKoin(appDeclaration = {
                 androidContext(this@MainActivity)
             }, modules = appModules())
+            PerformanceMonitor.endSection()
         } finally {
             StrictMode.setThreadPolicy(oldPolicy)
         }
@@ -41,5 +45,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             App()
         }
+        // Report fully drawn for Play Store vitals (TTFD metric)
+        reportFullyDrawn()
+        PerformanceMonitor.endSection()
     }
 }

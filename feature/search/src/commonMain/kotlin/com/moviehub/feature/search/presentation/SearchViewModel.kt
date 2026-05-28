@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import com.moviehub.core.utils.PerformanceMonitor
 
 class SearchViewModel(
     private val repository: SearchRepository,
@@ -43,19 +44,24 @@ class SearchViewModel(
 
     private fun loadRecentSearches() {
         viewModelScope.launch {
+            PerformanceMonitor.beginSection("VM:Search:loadRecentSearches")
             try {
-                val profileId = profileRepository.activeProfile.value?.id ?: return@launch
                 try {
-                    searchHistoryDao.getRecentSearches(profileId).collect { history ->
-                        _state.value = _state.value.copy(
-                            recentSearches = history.map { it.query }
-                        )
+                    val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                    try {
+                        searchHistoryDao.getRecentSearches(profileId).collect { history ->
+                            _state.value = _state.value.copy(
+                                recentSearches = history.map { it.query }
+                            )
+                        }
+                    } catch (e: Exception) {
+                        _state.value = _state.value.copy(recentSearches = emptyList())
                     }
                 } catch (e: Exception) {
                     _state.value = _state.value.copy(recentSearches = emptyList())
                 }
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(recentSearches = emptyList())
+            } finally {
+                PerformanceMonitor.endSection()
             }
         }
     }
@@ -65,36 +71,51 @@ class SearchViewModel(
         if (currentQuery.isBlank()) return
 
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null)
+            PerformanceMonitor.beginSection("VM:Search:performSearch")
+            try {
+                _state.value = _state.value.copy(isLoading = true, error = null)
 
-            // Save to search history
-            val profileId = profileRepository.activeProfile.value?.id
-            if (profileId != null) {
-                searchHistoryDao.insertSearch(
-                    SearchHistoryEntity(query = currentQuery, profileId = profileId)
+                // Save to search history
+                val profileId = profileRepository.activeProfile.value?.id
+                if (profileId != null) {
+                    searchHistoryDao.insertSearch(
+                        SearchHistoryEntity(query = currentQuery, profileId = profileId)
+                    )
+                }
+
+                val results = repository.searchMovies(currentQuery)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    results = results,
+                    error = if (results.isEmpty()) "No results found for '$currentQuery'" else null
                 )
+            } finally {
+                PerformanceMonitor.endSection()
             }
-
-            val results = repository.searchMovies(currentQuery)
-            _state.value = _state.value.copy(
-                isLoading = false,
-                results = results,
-                error = if (results.isEmpty()) "No results found for '$currentQuery'" else null
-            )
         }
     }
 
     private fun clearHistory() {
         viewModelScope.launch {
-            val profileId = profileRepository.activeProfile.value?.id ?: return@launch
-            searchHistoryDao.clearSearchHistory(profileId)
+            PerformanceMonitor.beginSection("VM:Search:clearHistory")
+            try {
+                val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                searchHistoryDao.clearSearchHistory(profileId)
+            } finally {
+                PerformanceMonitor.endSection()
+            }
         }
     }
 
     private fun removeSearch(query: String) {
         viewModelScope.launch {
-            val profileId = profileRepository.activeProfile.value?.id ?: return@launch
-            searchHistoryDao.deleteSearch(query, profileId)
+            PerformanceMonitor.beginSection("VM:Search:removeSearch")
+            try {
+                val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                searchHistoryDao.deleteSearch(query, profileId)
+            } finally {
+                PerformanceMonitor.endSection()
+            }
         }
     }
 }

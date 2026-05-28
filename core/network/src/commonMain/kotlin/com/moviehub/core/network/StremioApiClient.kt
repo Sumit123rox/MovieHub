@@ -18,7 +18,8 @@ import kotlinx.serialization.json.jsonObject
 
 class StremioApiClient(
     private val httpClient: HttpClient,
-    private val dispatchers: NetworkDispatchers = NetworkDispatchers()
+    private val dispatchers: NetworkDispatchers = NetworkDispatchers(),
+    private val dedupCache: DeduplicatingCache = DeduplicatingCache()
 ) {
     private val logger = Logger.withTag("MovieHubNet")
     private val json = Json { 
@@ -78,25 +79,29 @@ class StremioApiClient(
         val url = if (baseUrl.endsWith("/manifest.json")) baseUrl else "${baseUrl.removeSuffix("/")}/manifest.json"
         logger.i { "Fetching manifest: $url" }
         return withContext(dispatchers.io) {
-            try {
-                val response = httpClient.get(url)
-                val responseStatus = response.status
-                logger.i { "Manifest HTTP response: ${responseStatus.value} for $url" }
-                if (!responseStatus.isSuccess()) {
-                    logger.w { "Manifest request returned non-success status ${responseStatus.value} from $url" }
-                    return@withContext null
+            dedupCache.get(url) {
+                try {
+                    val response = httpClient.get(url)
+                    val responseStatus = response.status
+                    logger.i { "Manifest HTTP response: ${responseStatus.value} for $url" }
+                    if (!responseStatus.isSuccess()) {
+                        logger.w { "Manifest request returned non-success status ${responseStatus.value} from $url" }
+                        null
+                    } else {
+                        val body = safeParseBody(response)
+                        if (body == null) {
+                            logger.w { "safeParseBody returned null for manifest from $url" }
+                            null
+                        } else {
+                            json.decodeFromString<StremioManifest>(body).also {
+                                logger.i { "Manifest fetched successfully: ${it.name} (id=${it.id}, resources=${it.resources})" }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.e(e) { "Error fetching/decoding manifest from $url: ${e.message}" }
+                    null
                 }
-                val body = safeParseBody(response)
-                if (body == null) {
-                    logger.w { "safeParseBody returned null for manifest from $url" }
-                    return@withContext null
-                }
-                json.decodeFromString<StremioManifest>(body).also {
-                    logger.i { "Manifest fetched successfully: ${it.name} (id=${it.id}, resources=${it.resources})" }
-                }
-            } catch (e: Exception) {
-                logger.e(e) { "Error fetching/decoding manifest from $url: ${e.message}" }
-                null
             }
         }
     }
@@ -127,15 +132,22 @@ class StremioApiClient(
         val url = "$sanitizedBase/catalog/$type/$encodedId$extraPath.json"
         logger.i { "Fetching catalog: $url" }
         return withContext(dispatchers.io) {
-            try {
-                val response = httpClient.get(url)
-                val body = safeParseBody(response) ?: return@withContext null
-                json.decodeFromString<CatalogResponse>(body).also {
-                    logger.i { "Catalog fetched successfully: ${it.metas.size} items" }
+            dedupCache.get(url) {
+                try {
+                    val response = httpClient.get(url)
+                    val body = safeParseBody(response)
+                    if (body == null) {
+                        logger.w { "safeParseBody returned null for catalog from $url" }
+                        null
+                    } else {
+                        json.decodeFromString<CatalogResponse>(body).also {
+                            logger.i { "Catalog fetched successfully: ${it.metas.size} items" }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.e(e) { "Error fetching/decoding catalog from $url" }
+                    null
                 }
-            } catch (e: Exception) {
-                logger.e(e) { "Error fetching/decoding catalog from $url" }
-                null
             }
         }
     }
@@ -150,15 +162,22 @@ class StremioApiClient(
         val url = "$sanitizedBase/meta/$type/$encodedId.json"
         logger.i { "Fetching meta: $url" }
         return withContext(dispatchers.io) {
-            try {
-                val response = httpClient.get(url)
-                val body = safeParseBody(response) ?: return@withContext null
-                json.decodeFromString<MetaResponse>(body).also {
-                    logger.i { "Meta fetched successfully for: ${it.meta.name}" }
+            dedupCache.get(url) {
+                try {
+                    val response = httpClient.get(url)
+                    val body = safeParseBody(response)
+                    if (body == null) {
+                        logger.w { "safeParseBody returned null for meta from $url" }
+                        null
+                    } else {
+                        json.decodeFromString<MetaResponse>(body).also {
+                            logger.i { "Meta fetched successfully for: ${it.meta.name}" }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.e(e) { "Error fetching/decoding meta from $url" }
+                    null
                 }
-            } catch (e: Exception) {
-                logger.e(e) { "Error fetching/decoding meta from $url" }
-                null
             }
         }
     }
@@ -175,15 +194,22 @@ class StremioApiClient(
         val url = "$sanitizedBase/stream/$type/$encodedId.json"
         logger.i { "Fetching streams: $url" }
         return withContext(dispatchers.io) {
-            try {
-                val response = httpClient.get(url)
-                val body = safeParseBody(response) ?: return@withContext emptyList()
-                StreamParser.parse(body, addonName, addonId).also {
-                    logger.i { "Streams fetched successfully: ${it.size} streams" }
+            dedupCache.get(url) {
+                try {
+                    val response = httpClient.get(url)
+                    val body = safeParseBody(response)
+                    if (body == null) {
+                        logger.w { "safeParseBody returned null for streams from $url" }
+                        emptyList()
+                    } else {
+                        StreamParser.parse(body, addonName, addonId).also {
+                            logger.i { "Streams fetched successfully: ${it.size} streams" }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.e(e) { "Error fetching/parsing streams from $url" }
+                    emptyList()
                 }
-            } catch (e: Exception) {
-                logger.e(e) { "Error fetching/parsing streams from $url" }
-                emptyList()
             }
         }
     }

@@ -1,7 +1,6 @@
 package com.moviehub.core.network.scraper
 
-import platform.Foundation.*
-import platform.Security.*
+import com.moviehub.core.network.commoncrypto.*
 import kotlinx.cinterop.*
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -9,54 +8,77 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 @OptIn(ExperimentalForeignApi::class)
 actual fun pluginDigestHex(algorithm: String, data: String): String {
     val input = data.encodeToByteArray()
-    val nsData = input.toNSData()
+    val digestLen: Int
+    val compute: (CPointer<ByteVar>, UInt, CPointer<UByteVar>) -> Unit
 
-    return when (algorithm.uppercase()) {
+    when (algorithm.uppercase()) {
         "MD5" -> {
-            val digest = UByteArray(16) // CC_MD5_DIGEST_LENGTH
-            nsData.bytes?.let { bytes ->
-                input.usePinned { pinned ->
-                    val hash = NSMutableData.dataWithLength(16u) ?: return ""
-                    CC_MD5(pinned.addressOf(0), input.size.toUInt(), hash.mutableBytes?.reinterpret())
-                    hash.toHexString()
-                }
-            } ?: fallbackDigest(algorithm, data)
+            digestLen = 16
+            compute = { d, len, md -> CC_MD5(d, len, md) }
         }
-        "SHA1" -> fallbackDigest(algorithm, data)
-        "SHA256" -> fallbackDigest(algorithm, data)
-        "SHA512" -> fallbackDigest(algorithm, data)
+        "SHA1" -> {
+            digestLen = 20
+            compute = { d, len, md -> CC_SHA1(d, len, md) }
+        }
+        "SHA256" -> {
+            digestLen = 32
+            compute = { d, len, md -> CC_SHA256(d, len, md) }
+        }
+        "SHA512" -> {
+            digestLen = 64
+            compute = { d, len, md -> CC_SHA512(d, len, md) }
+        }
         else -> error("Unsupported digest algorithm: $algorithm")
     }
-}
 
-/**
- * Fallback digest implementation using pure Kotlin.
- * For production iOS apps, consider linking CommonCrypto via cinterop.
- * This uses the built-in Kotlin SHA implementations.
- */
-private fun fallbackDigest(algorithm: String, data: String): String {
-    // Use a simple pure-Kotlin approach via NSData
-    val input = data.encodeToByteArray()
-    return input.joinToString(separator = "") { byte ->
-        byte.toUByte().toString(16).padStart(2, '0')
+    return memScoped {
+        val digest = allocArray<UByteVar>(digestLen)
+        input.usePinned { pinned ->
+            compute(pinned.addressOf(0), input.size.toUInt(), digest)
+        }
+        (0 until digestLen).joinToString("") {
+            digest[it].toString(16).padStart(2, '0')
+        }
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual fun pluginHmacHex(algorithm: String, key: String, data: String): String {
-    // Simplified HMAC - for full iOS support, link CommonCrypto via cinterop
+    val algoConst = when (algorithm.uppercase()) {
+        "SHA1" -> 1u   // kCCHmacAlgSHA1
+        "MD5" -> 2u    // kCCHmacAlgMD5
+        "SHA256" -> 3u // kCCHmacAlgSHA256
+        "SHA512" -> 4u // kCCHmacAlgSHA512
+        else -> error("Unsupported HMAC algorithm: $algorithm")
+    }
+
+    val digestLen = when (algorithm.uppercase()) {
+        "MD5" -> 16
+        "SHA1" -> 20
+        "SHA256" -> 32
+        "SHA512" -> 64
+        else -> error("Unsupported digest length")
+    }
+
     val keyBytes = key.encodeToByteArray()
     val dataBytes = data.encodeToByteArray()
-    // XOR-based simplified HMAC for basic compatibility
-    val blockSize = 64
-    val paddedKey = if (keyBytes.size > blockSize) {
-        keyBytes.copyOf(blockSize)
-    } else {
-        keyBytes.copyOf(blockSize)
+
+    return memScoped {
+        val macOut = allocArray<UByteVar>(digestLen)
+        keyBytes.usePinned { keyPinned ->
+            dataBytes.usePinned { dataPinned ->
+                CCHmac(
+                    algoConst,
+                    keyPinned.addressOf(0), keyBytes.size.toULong(),
+                    dataPinned.addressOf(0), dataBytes.size.toULong(),
+                    macOut
+                )
+            }
+        }
+        (0 until digestLen).joinToString("") {
+            macOut[it].toString(16).padStart(2, '0')
+        }
     }
-    val ipad = ByteArray(blockSize) { (paddedKey[it].toInt() xor 0x36).toByte() }
-    val opad = ByteArray(blockSize) { (paddedKey[it].toInt() xor 0x5c).toByte() }
-    // For now, return a hex-encoded result - proper impl needs CommonCrypto cinterop
-    return pluginDigestHex(algorithm, ipad.map { it.toInt().toChar() }.toCharArray().concatToString() + data)
 }
 
 @OptIn(ExperimentalEncodingApi::class)
@@ -68,30 +90,4 @@ actual fun pluginBase64Decode(data: String): String {
     val normalized = data.trim().replace("\n", "").replace("\r", "").replace(" ", "")
     val decoded = Base64.decode(normalized)
     return decoded.decodeToString()
-}
-
-@OptIn(ExperimentalForeignApi::class)
-private fun ByteArray.toNSData(): NSData {
-    return this.usePinned { pinned ->
-        NSData.dataWithBytes(pinned.addressOf(0), this.size.toULong())
-    }
-}
-
-@OptIn(ExperimentalForeignApi::class)
-private fun NSData.toHexString(): String {
-    val bytes = this.bytes ?: return ""
-    val length = this.length.toInt()
-    val result = StringBuilder(length * 2)
-    for (i in 0 until length) {
-        val byte = bytes.reinterpret<UByteVar>()[i]
-        result.append(byte.toString(16).padStart(2, '0'))
-    }
-    return result.toString()
-}
-
-// CommonCrypto stub - these will resolve when CommonCrypto cinterop is configured
-@OptIn(ExperimentalForeignApi::class)
-private fun CC_MD5(data: CPointer<ByteVar>?, len: UInt, md: CPointer<UByteVar>?): CPointer<UByteVar>? {
-    // Stub - requires CommonCrypto cinterop definition
-    return md
 }
