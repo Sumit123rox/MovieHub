@@ -108,7 +108,7 @@ MovieHub/
 ### Clone & Build
 
 ```bash
-git clone https://github.com/yourusername/MovieHub.git
+git clone https://github.com/Sumit123rox/MovieHub.git
 cd MovieHub
 
 # Android (debug APK)
