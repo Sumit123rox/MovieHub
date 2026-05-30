@@ -1,14 +1,18 @@
 package com.moviehub.feature.player.presentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,10 +30,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -37,22 +43,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.UserPreferencesDao
 import com.moviehub.core.database.WatchHistoryDao
-import com.moviehub.core.database.WatchHistoryEntity
 import com.moviehub.core.database.WatchProgress
 import com.moviehub.core.database.WatchProgressDao
 import com.moviehub.core.model.PlayerPlaybackState
 import com.moviehub.core.model.StreamItem
 import com.moviehub.core.model.SubtitleStyle
 import com.moviehub.core.model.VideoScale
+import com.moviehub.core.player.MoviePlayerController
+import com.moviehub.core.ui.components.SmartStatusBar
 import com.moviehub.core.ui.theme.MovieHubColors
+import com.moviehub.core.ui.theme.MovieHubDimens
 import com.moviehub.feature.player.presentation.components.PlayerControls
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import io.kamel.image.KamelImage
+import io.kamel.image.asyncPainterResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
@@ -64,8 +70,6 @@ expect fun VideoPlayer(
     url: String,
     headers: Map<String, String> = emptyMap(),
     onPlaybackStateChanged: (PlayerPlaybackState) -> Unit = {},
-    requestedAction: PlayerAction? = null,
-    onActionConsumed: () -> Unit = {},
     forceLandscape: Boolean = true,
     brightness: Float = 1f,
     videoScale: VideoScale = VideoScale.FIT,
@@ -73,21 +77,30 @@ expect fun VideoPlayer(
     subtitleStyle: SubtitleStyle = SubtitleStyle(),
     drmLicenseUrl: String? = null,
     drmScheme: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 )
 
 sealed interface PlayerAction {
     data class SeekTo(val positionMs: Long) : PlayerAction
+
     data class SetSpeed(val speed: Float) : PlayerAction
+
     /** @param groupIndex TrackGroup index, -1 for subtitles = disabled */
     data class SelectAudioTrack(val groupIndex: Int, val trackIndex: Int) : PlayerAction
+
     /** @param groupIndex TrackGroup index, -1 = disable subtitles */
     data class SelectSubtitleTrack(val groupIndex: Int, val trackIndex: Int) : PlayerAction
+
     data object Play : PlayerAction
+
     data object Pause : PlayerAction
+
     data class SetVolume(val volume: Float) : PlayerAction
+
     data class SetScale(val scale: VideoScale) : PlayerAction
+
     data object ResetZoom : PlayerAction
+
     data object EnterPip : PlayerAction
 }
 
@@ -106,7 +119,48 @@ fun PlayerScreen(
     var activeStream by remember { mutableStateOf(stream) }
     var playbackState by remember { mutableStateOf(PlayerPlaybackState()) }
     var requestedAction by remember { mutableStateOf<PlayerAction?>(null) }
+    var isActionPending by remember { mutableStateOf(false) }
+
+    val playerController: MoviePlayerController = koinInject()
+
+    LaunchedEffect(requestedAction) {
+        requestedAction?.let { action ->
+            when (action) {
+                is PlayerAction.Play -> playerController.play()
+                is PlayerAction.Pause -> playerController.pause()
+                is PlayerAction.SeekTo -> playerController.seekTo(action.positionMs)
+                is PlayerAction.SetSpeed -> playerController.setSpeed(action.speed)
+                is PlayerAction.SetVolume -> playerController.setVolume(action.volume)
+                is PlayerAction.SelectAudioTrack -> {
+                    val flatIndex = playbackState.audioTracks.indexOfFirst {
+                        it.index == action.groupIndex && it.id == action.trackIndex.toString()
+                    }
+                    if (flatIndex != -1) playerController.selectAudioTrack(flatIndex)
+                }
+                is PlayerAction.SelectSubtitleTrack -> {
+                    if (action.groupIndex == -1) {
+                        playerController.selectSubtitleTrack(-1)
+                    } else {
+                        val flatIndex = playbackState.subtitleTracks.indexOfFirst {
+                            it.index == action.groupIndex && it.id == action.trackIndex.toString()
+                        }
+                        if (flatIndex != -1) playerController.selectSubtitleTrack(flatIndex)
+                    }
+                }
+                is PlayerAction.SetScale -> playerController.setVideoScale(action.scale)
+                is PlayerAction.ResetZoom -> playerController.setVideoScale(VideoScale.FIT)
+                else -> { /* no-op */ }
+            }
+            requestedAction = null
+        }
+    }
+    var lastSeekTime by remember { mutableStateOf(0L) }
     var isControlsVisible by remember { mutableStateOf(true) }
+    var isScreenLocked by remember { mutableStateOf(false) }
+    val blurRadius by animateDpAsState(
+        targetValue = if (isControlsVisible && !isScreenLocked && !isIosPlatform) 12.dp else 0.dp,
+        animationSpec = tween(durationMillis = 300),
+    )
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
     var showLoading by remember { mutableStateOf(true) }
     var hasSavedHistory by remember { mutableStateOf(false) }
@@ -122,7 +176,6 @@ fun PlayerScreen(
     var brightness by remember { mutableStateOf(initialBrightness) }
     var transientVolume by remember { mutableStateOf<Float?>(null) }
     var transientBrightness by remember { mutableStateOf<Float?>(null) }
-    var isScreenLocked by remember { mutableStateOf(false) }
     var videoScale by remember { mutableStateOf(VideoScale.FIT) }
     var freeZoomScale by remember { mutableStateOf(1f) }
     var freeZoomOffset by remember { mutableStateOf(Offset.Zero) }
@@ -171,13 +224,16 @@ fun PlayerScreen(
 
     // Sort streams with active one first
     val sortedStreams = remember(streams, activeStream) {
-        if (streams.isEmpty()) streams
-        else {
+        if (streams.isEmpty()) {
+            streams
+        } else {
             val active = activeStream
             val activeIndex = streams.indexOfFirst { it.url == active.url && it.externalUrl == active.externalUrl }
             if (activeIndex > 0) {
                 listOf(streams[activeIndex]) + streams.filterIndexed { i, _ -> i != activeIndex }
-            } else streams
+            } else {
+                streams
+            }
         }
     }
 
@@ -192,7 +248,7 @@ fun PlayerScreen(
             w >= 1920 || h >= 1080 -> "1080p"
             w >= 1280 || h >= 720 -> "720p"
             w >= 854 || h >= 480 -> "480p"
-            w > 0 || h > 0 -> "${w}x${h}"
+            w > 0 || h > 0 -> "${w}x$h"
             else -> ""
         }
     }
@@ -213,6 +269,7 @@ fun PlayerScreen(
                 selectedSubtitleTrackIndex = update.selectedSubtitleTrackIndex,
                 audioTracks = if (update.audioTracks.isNotEmpty()) update.audioTracks else playbackState.audioTracks,
                 subtitleTracks = if (update.subtitleTracks.isNotEmpty()) update.subtitleTracks else playbackState.subtitleTracks,
+                videoTracks = if (update.videoTracks.isNotEmpty()) update.videoTracks else playbackState.videoTracks,
                 videoWidth = if (update.videoWidth > 0) update.videoWidth else playbackState.videoWidth,
                 videoHeight = if (update.videoHeight > 0) update.videoHeight else playbackState.videoHeight,
                 videoCodec = update.videoCodec ?: playbackState.videoCodec,
@@ -224,8 +281,16 @@ fun PlayerScreen(
         }
     }
 
+    // Smart status bar — dark icons for player's black background
+    SmartStatusBar(isDark = true, color = Color.Black)
+
     // Intercept system back button — delegate to navigation popBackStack
     PlayerBackHandler(enabled = true, onBack = onBackClick)
+
+    // Unlock orientation when leaving the player
+    DisposableEffect(Unit) {
+        onDispose { unlockOrientation() }
+    }
 
     // Load seek increment from user preferences
     LaunchedEffect(mediaId) {
@@ -242,28 +307,20 @@ fun PlayerScreen(
         if (progress != null && !progress.isWatched) {
             // Restore playback position (if > 5 seconds)
             if (progress.progressMs > 5_000) {
-                delay(500) // Wait for player to initialize
+                delay(2000) // Wait for mpv to fully initialize before seeking
                 requestedAction = PlayerAction.SeekTo(progress.progressMs)
                 hasResumed = true
             }
-            // Wait for audio tracks to actually be loaded (player prepare is async)
-            while (playbackState.audioTracks.isEmpty() && isActive) {
-                delay(100)
-            }
-            // Restore audio track preference (user explicitly selected a track)
+            // Restore audio track preference (best-effort)
             if (progress.audioGroupIndex >= 0 && playbackState.audioTracks.isNotEmpty()) {
-                delay(300) // Small buffer after tracks detected
+                delay(200)
                 requestedAction = PlayerAction.SelectAudioTrack(progress.audioGroupIndex, progress.audioTrackIndex)
                 currentAudioGroupIndex = progress.audioGroupIndex
                 currentAudioTrackIndex = progress.audioTrackIndex
             }
-            // Wait for subtitle tracks to be available
-            while (playbackState.subtitleTracks.isEmpty() && isActive) {
-                delay(100)
-            }
-            // Restore subtitle track preference (user explicitly enabled/disabled)
+            // Restore subtitle track preference (best-effort)
             if (progress.subtitleGroupIndex != -2 && playbackState.subtitleTracks.isNotEmpty()) {
-                delay(300)
+                delay(200)
                 requestedAction = PlayerAction.SelectSubtitleTrack(progress.subtitleGroupIndex, progress.subtitleTrackIndex)
                 currentSubtitleGroupIndex = progress.subtitleGroupIndex
                 currentSubtitleTrackIndex = progress.subtitleTrackIndex
@@ -308,7 +365,14 @@ fun PlayerScreen(
     LaunchedEffect(Unit) {
         while (isActive) {
             delay(15000)
-            if (playbackState.isPlaying && playbackState.currentPositionMs > 0) {
+            // Only save progress when ALL values are valid — prevents saving
+            // WatchProgress(durationMs=0) which causes HomeScreen to show
+            // spurious "watched" + "<1 min left" states.
+            if (playbackState.isPlaying &&
+                playbackState.currentPositionMs > 0 &&
+                playbackState.durationMs > 0 &&
+                playbackState.currentPositionMs < playbackState.durationMs
+            ) {
                 try {
                     val profileId = profileRepository.activeProfile.value?.id ?: continue
                     val videoId = mediaId ?: continue
@@ -323,7 +387,7 @@ fun PlayerScreen(
                             audioTrackIndex = currentAudioTrackIndex,
                             subtitleGroupIndex = currentSubtitleGroupIndex,
                             subtitleTrackIndex = currentSubtitleTrackIndex,
-                        )
+                        ),
                     )
                 } catch (_: Exception) {
                     // Best-effort save — DB or lifecycle may be unavailable
@@ -336,7 +400,7 @@ fun PlayerScreen(
     // Wrapped in try-catch to prevent crash if DB is already closed during activity teardown
     DisposableEffect(Unit) {
         onDispose {
-            if (hasStartedPlaying && playbackState.currentPositionMs > 0) {
+            if (hasStartedPlaying && playbackState.currentPositionMs > 0 && playbackState.durationMs > 0 && playbackState.currentPositionMs < playbackState.durationMs) {
                 periodicSaveScope.launch {
                     try {
                         val profileId = profileRepository.activeProfile.value?.id ?: return@launch
@@ -352,7 +416,7 @@ fun PlayerScreen(
                                 audioTrackIndex = currentAudioTrackIndex,
                                 subtitleGroupIndex = currentSubtitleGroupIndex,
                                 subtitleTrackIndex = currentSubtitleTrackIndex,
-                            )
+                            ),
                         )
                     } catch (_: Exception) {
                         // DB may be closed during activity teardown — best-effort save
@@ -383,7 +447,7 @@ fun PlayerScreen(
                         audioTrackIndex = currentAudioTrackIndex,
                         subtitleGroupIndex = currentSubtitleGroupIndex,
                         subtitleTrackIndex = currentSubtitleTrackIndex,
-                    )
+                    ),
                 )
             } catch (_: Exception) {
                 // Best-effort
@@ -408,7 +472,7 @@ fun PlayerScreen(
                         audioTrackIndex = currentAudioTrackIndex,
                         subtitleGroupIndex = currentSubtitleGroupIndex,
                         subtitleTrackIndex = currentSubtitleTrackIndex,
-                    )
+                    ),
                 )
             } catch (_: Exception) {
                 // Best-effort save on pause
@@ -417,7 +481,7 @@ fun PlayerScreen(
     }
 
     // Auto-hide controls (resets on user interaction via interactionTick)
-    LaunchedEffect(isControlsVisible, playbackState.isPlaying, isSettingsSheetOpen, interactionTick) {
+    LaunchedEffect(isControlsVisible, playbackState.isPlaying, interactionTick) {
         if (isControlsVisible && playbackState.isPlaying && !isSettingsSheetOpen) {
             delay(3000)
             isControlsVisible = false
@@ -462,8 +526,9 @@ fun PlayerScreen(
         hasTriggeredAutoPlay = false
         while (isActive) {
             delay(1000)
-            if (!hasTriggeredAutoPlay && playbackState.durationMs > 0
-                && playbackState.currentPositionMs >= playbackState.durationMs * 0.95) {
+            if (!hasTriggeredAutoPlay && playbackState.durationMs > 0 &&
+                playbackState.currentPositionMs >= playbackState.durationMs * 0.95
+            ) {
                 hasTriggeredAutoPlay = true
                 delay(1500)
                 onNextEpisode?.invoke()
@@ -513,14 +578,14 @@ fun PlayerScreen(
             .background(Color.Black)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null
+                indication = null,
             ) {
                 if (!isScreenLocked) {
                     isControlsVisible = !isControlsVisible
                     interactionTick++
                 }
             },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         if (streamUrl.isNotBlank()) {
             // Zoom layer wraps the video for free zoom/pinch
@@ -531,22 +596,21 @@ fun PlayerScreen(
                         scaleX = freeZoomScale,
                         scaleY = freeZoomScale,
                         translationX = freeZoomOffset.x,
-                        translationY = freeZoomOffset.y
+                        translationY = freeZoomOffset.y,
                     )
+                    .blur(blurRadius),
             ) {
                 VideoPlayer(
                     url = streamUrl,
                     headers = headers,
                     onPlaybackStateChanged = onStateChanged,
-                    requestedAction = requestedAction,
-                    onActionConsumed = { requestedAction = null },
                     brightness = brightness,
                     videoScale = videoScale,
                     subtitleBottomMargin = if (isControlsVisible) 110 else 0,
                     subtitleStyle = subtitleStyle,
                     drmLicenseUrl = activeStream.drmLicenseUrl,
                     drmScheme = activeStream.drmScheme,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
 
@@ -555,7 +619,7 @@ fun PlayerScreen(
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
+                        .height(MovieHubDimens.Spacing.dp3)
                         .align(Alignment.TopCenter),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.White.copy(alpha = 0.15f),
@@ -568,29 +632,29 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(MovieHubDimens.Spacing.ml))
+                        .padding(horizontal = MovieHubDimens.Spacing.xxl, vertical = MovieHubDimens.Spacing.lg),
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
                             tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(MovieHubDimens.Icon.md),
                         )
                         Text(
                             text = "Screen Locked",
                             color = Color.White.copy(alpha = 0.8f),
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
                         )
                         Text(
                             text = "Double-tap to unlock",
                             color = Color.White.copy(alpha = 0.45f),
-                            style = MaterialTheme.typography.labelSmall
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
                 }
@@ -600,9 +664,9 @@ fun PlayerScreen(
                         .fillMaxSize()
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                onDoubleTap = { isScreenLocked = false }
+                                onDoubleTap = { isScreenLocked = false },
                             )
-                        }
+                        },
                 )
             }
 
@@ -624,7 +688,7 @@ fun PlayerScreen(
                                     val maxPanY = (freeZoomScale - 1f) * size.height / 2f
                                     freeZoomOffset = Offset(
                                         x = (freeZoomOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                        y = (freeZoomOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                        y = (freeZoomOffset.y + pan.y).coerceIn(-maxPanY, maxPanY),
                                     )
                                 } else if (freeZoomScale <= 1f) {
                                     freeZoomOffset = Offset.Zero
@@ -660,7 +724,7 @@ fun PlayerScreen(
                                             }
                                         }
                                     }
-                                }
+                                },
                             )
                         }
                         .pointerInput(playbackState.currentPositionMs, playbackState.durationMs) {
@@ -672,11 +736,11 @@ fun PlayerScreen(
                                         lastSeekTimeMs = playerTimeMillis()
                                         requestedAction = PlayerAction.SeekTo(
                                             (playbackState.currentPositionMs + seekMs)
-                                                .coerceIn(0L, playbackState.durationMs.coerceAtLeast(0L))
+                                                .coerceIn(0L, playbackState.durationMs.coerceAtLeast(0L)),
                                         )
                                         interactionTick++
                                     }
-                                }
+                                },
                             )
                         }
                         .pointerInput(seekIncrement) {
@@ -687,14 +751,14 @@ fun PlayerScreen(
                                     if (offset.x < w * 0.3f) {
                                         lastSeekTimeMs = playerTimeMillis()
                                         requestedAction = PlayerAction.SeekTo(
-                                            (playbackState.currentPositionMs - seekMs).coerceAtLeast(0L)
+                                            (playbackState.currentPositionMs - seekMs).coerceAtLeast(0L),
                                         )
                                         seekIndicatorText = "-${seekIncrement}s"
                                         interactionTick++
                                     } else if (offset.x > w * 0.7f) {
                                         lastSeekTimeMs = playerTimeMillis()
                                         requestedAction = PlayerAction.SeekTo(
-                                            (playbackState.currentPositionMs + seekMs).coerceAtMost(playbackState.durationMs)
+                                            (playbackState.currentPositionMs + seekMs).coerceAtMost(playbackState.durationMs),
                                         )
                                         seekIndicatorText = "+${seekIncrement}s"
                                         interactionTick++
@@ -703,9 +767,9 @@ fun PlayerScreen(
                                 onTap = {
                                     isControlsVisible = !isControlsVisible
                                     interactionTick++
-                                }
+                                },
                             )
-                        }
+                        },
                 )
             }
 
@@ -714,12 +778,15 @@ fun PlayerScreen(
                 visible = transientVolume != null,
                 enter = slideInHorizontally { -it } + fadeIn(tween(150)),
                 exit = slideOutHorizontally { -it } + fadeOut(tween(250)),
-                modifier = Modifier.fillMaxHeight().align(Alignment.CenterStart)
+                modifier = Modifier.fillMaxHeight().align(Alignment.CenterStart),
             ) {
                 SideSliderIndicator(
                     value = transientVolume ?: 0f,
-                    icon = if ((transientVolume ?: 0f) <= 0f) Icons.Default.VolumeDown
-                           else Icons.Default.VolumeUp,
+                    icon = if ((transientVolume ?: 0f) <= 0f) {
+                        Icons.Default.VolumeDown
+                    } else {
+                        Icons.Default.VolumeUp
+                    },
                 )
             }
 
@@ -728,12 +795,15 @@ fun PlayerScreen(
                 visible = transientBrightness != null,
                 enter = slideInHorizontally { it } + fadeIn(tween(150)),
                 exit = slideOutHorizontally { it } + fadeOut(tween(250)),
-                modifier = Modifier.fillMaxHeight().align(Alignment.CenterEnd)
+                modifier = Modifier.fillMaxHeight().align(Alignment.CenterEnd),
             ) {
                 SideSliderIndicator(
                     value = transientBrightness ?: 0f,
-                    icon = if ((transientBrightness ?: 0f) < 0.3f) Icons.Default.KeyboardArrowDown
-                           else Icons.Default.KeyboardArrowUp,
+                    icon = if ((transientBrightness ?: 0f) < 0.3f) {
+                        Icons.Default.KeyboardArrowDown
+                    } else {
+                        Icons.Default.KeyboardArrowUp
+                    },
                 )
             }
 
@@ -744,13 +814,24 @@ fun PlayerScreen(
                 seekIncrement = seekIncrement,
                 onSeekIndicatorChange = { seekIndicatorText = it },
                 onPlayPauseToggle = {
+                    // Debounce: ignore rapid taps within 500ms to prevent
+                    // queuing multiple play/pause commands on mpvQueue
+                    val now = playerTimeMillis()
+                    if (now - lastSeekTime < 500) return@PlayerControls
+                    lastSeekTime = now
                     requestedAction = if (playbackState.isPlaying) PlayerAction.Pause else PlayerAction.Play
                     interactionTick++
                 },
                 onBackClick = onBackClick,
-                onSeek = {
-                    lastSeekTimeMs = playerTimeMillis()
-                    requestedAction = PlayerAction.SeekTo((it * playbackState.durationMs).toLong())
+                onSeek = { progressFraction ->
+                    val now = playerTimeMillis()
+                    lastSeekTimeMs = now
+                    // Debounce: don't send more than 10 seeks/second
+                    if (now - lastSeekTime < 100) return@PlayerControls
+                    lastSeekTime = now
+                    val seekPos = (progressFraction * playbackState.durationMs).toLong()
+                        .coerceAtLeast(0L)
+                    requestedAction = PlayerAction.SeekTo(seekPos)
                     interactionTick++
                 },
                 progress = if (playbackState.durationMs > 0) playbackState.currentPositionMs.toFloat() / playbackState.durationMs else 0f,
@@ -775,7 +856,7 @@ fun PlayerScreen(
                                 audioTrackIndex = trackIndex,
                                 subtitleGroupIndex = currentSubtitleGroupIndex,
                                 subtitleTrackIndex = currentSubtitleTrackIndex,
-                            )
+                            ),
                         )
                     }
                 },
@@ -797,11 +878,14 @@ fun PlayerScreen(
                                 audioTrackIndex = currentAudioTrackIndex,
                                 subtitleGroupIndex = groupIndex,
                                 subtitleTrackIndex = trackIndex,
-                            )
+                            ),
                         )
                     }
                 },
-                onScaleChange = { videoScale = it; requestedAction = PlayerAction.SetScale(it) },
+                onScaleChange = {
+                    videoScale = it;
+                    requestedAction = PlayerAction.SetScale(it)
+                },
                 onScaleCycle = {
                     val nextIndex = (VideoScale.entries.indexOf(videoScale) + 1) % VideoScale.entries.size
                     val nextScale = VideoScale.entries[nextIndex]
@@ -816,6 +900,13 @@ fun PlayerScreen(
                 currentScale = videoScale,
                 freeZoomScale = freeZoomScale,
                 audioTracks = playbackState.audioTracks,
+                videoTracks = playbackState.videoTracks,
+                onVideoTrackChange = { index ->
+                    val track = playbackState.videoTracks.getOrNull(index)
+                    if (track != null) {
+                        requestedAction = PlayerAction.SetScale(VideoScale.FIT)
+                    }
+                },
                 subtitleTracks = playbackState.subtitleTracks,
                 currentSpeed = playbackState.playbackSpeed,
                 currentStream = activeStream,
@@ -847,7 +938,7 @@ fun PlayerScreen(
                 chapters = playbackState.chapters,
                 showDebugOverlay = showDebugOverlay,
                 onToggleDebug = { showDebugOverlay = !showDebugOverlay },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             )
 
             // Seek indicator overlay (on top of controls, positioned at sides like YouTube)
@@ -856,15 +947,15 @@ fun PlayerScreen(
                 Box(
                     modifier = Modifier
                         .align(if (isRewind) Alignment.CenterStart else Alignment.CenterEnd)
-                        .padding(horizontal = 48.dp)
-                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 28.dp, vertical = 20.dp)
+                        .padding(horizontal = MovieHubDimens.Icon.xxxl)
+                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(MovieHubDimens.Spacing.lg))
+                        .padding(horizontal = MovieHubDimens.Icon.xl, vertical = MovieHubDimens.Spacing.xl),
                 ) {
                     Text(
                         text = seekIndicatorText!!,
                         color = Color.White,
                         style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
@@ -880,7 +971,7 @@ fun PlayerScreen(
                     brightness = brightness,
                     volume = volume,
                     onDismiss = { showDebugOverlay = false },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
 
@@ -892,39 +983,39 @@ fun PlayerScreen(
                         .background(Color.Black.copy(alpha = 0.85f))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null
+                            indication = null,
                         ) { /* Intercept and absorb clicks */ },
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = Color(0xFF161616),
-                            contentColor = Color.White
+                            contentColor = Color.White,
                         ),
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(MovieHubDimens.Spacing.xxl),
                         modifier = Modifier
-                            .width(420.dp)
-                            .padding(24.dp)
+                            .width(MovieHubDimens.Player.overlaySheetMaxWidth)
+                            .padding(MovieHubDimens.Spacing.xxl),
                     ) {
                         Column(
-                            modifier = Modifier.padding(24.dp),
+                            modifier = Modifier.padding(MovieHubDimens.Spacing.xxl),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(48.dp)
+                                    .size(MovieHubDimens.Icon.xxxl)
                                     .background(
                                         Color.Red.copy(alpha = 0.15f),
-                                        CircleShape
+                                        CircleShape,
                                     ),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Info,
                                     contentDescription = "Playback Failed",
                                     tint = Color.Red,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(MovieHubDimens.Icon.xl),
                                 )
                             }
 
@@ -933,14 +1024,14 @@ fun PlayerScreen(
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
                             )
 
                             Text(
                                 text = "An error occurred: ${playbackState.error}. You can try playing this stream in an external player, copy the direct link, or choose another source.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
                             )
 
                             if (!feedbackMessage.isNullOrBlank()) {
@@ -949,15 +1040,15 @@ fun PlayerScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MovieHubColors.Success,
                                     fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xxs))
 
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
+                                horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Button(
                                     onClick = {
@@ -969,10 +1060,10 @@ fun PlayerScreen(
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = Color.White
+                                        contentColor = Color.White,
                                     ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1.5f)
+                                    shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+                                    modifier = Modifier.weight(1.5f),
                                 ) {
                                     Text("Play Externally", fontWeight = FontWeight.Bold, maxLines = 1)
                                 }
@@ -983,11 +1074,11 @@ fun PlayerScreen(
                                         feedbackMessage = "Link copied to clipboard!"
                                     },
                                     colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = Color.White
+                                        contentColor = Color.White,
                                     ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                                    modifier = Modifier.weight(1.2f)
+                                    shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+                                    border = androidx.compose.foundation.BorderStroke(MovieHubDimens.Spacing.dp1, Color.White.copy(alpha = 0.2f)),
+                                    modifier = Modifier.weight(1.2f),
                                 ) {
                                     Text("Copy Link", maxLines = 1)
                                 }
@@ -996,8 +1087,8 @@ fun PlayerScreen(
                             TextButton(
                                 onClick = onBackClick,
                                 colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Color.White.copy(alpha = 0.6f)
-                                )
+                                    contentColor = Color.White.copy(alpha = 0.6f),
+                                ),
                             ) {
                                 Text("Go Back")
                             }
@@ -1008,22 +1099,53 @@ fun PlayerScreen(
         } else {
             Text(
                 text = "Invalid Stream URL",
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.error,
             )
         }
 
-        // Loading overlay — drawn after all video content so it renders on top
-        if (showLoading && playbackState.error == null) {
+        // ═══════════════════════════════════════════
+        // Loading overlay with poster blur backdrop and crossfade exit
+        // ═══════════════════════════════════════════
+        AnimatedVisibility(
+            visible = showLoading && playbackState.error == null,
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(500)),
+        ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f)),
-                contentAlignment = Alignment.Center
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
             ) {
+                // Blurred poster backdrop (if poster URL is available)
+                if (posterUrl != null) {
+                    KamelImage(
+                        resource = { asyncPainterResource(data = posterUrl) },
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(24.dp),
+                        contentScale = ContentScale.Crop,
+                        onLoading = { Box(Modifier.fillMaxSize().background(Color.Black)) },
+                        onFailure = { Box(Modifier.fillMaxSize().background(Color.Black)) },
+                    )
+                    // Dark overlay on top of the poster for spinner contrast
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                    )
+                } else {
+                    // No poster — fall back to plain dark overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.45f)),
+                    )
+                }
+
                 CircularProgressIndicator(
                     color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 4.dp,
-                    modifier = Modifier.size(48.dp)
+                    strokeWidth = MovieHubDimens.Spacing.xxs,
+                    modifier = Modifier.size(MovieHubDimens.Icon.xxxl),
                 )
             }
         }
@@ -1034,38 +1156,38 @@ fun PlayerScreen(
 fun SideSliderIndicator(
     value: Float,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
-            .width(44.dp)
-            .padding(vertical = 80.dp)
-            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(22.dp))
-            .padding(horizontal = 8.dp, vertical = 16.dp),
-        contentAlignment = Alignment.Center
+            .width(MovieHubDimens.Player.sideSliderWidth)
+            .padding(vertical = MovieHubDimens.Player.shimmerHeight)
+            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(MovieHubDimens.Icon.md))
+            .padding(horizontal = MovieHubDimens.Spacing.sm, vertical = MovieHubDimens.Spacing.lg),
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxHeight()
+            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
+            modifier = Modifier.fillMaxHeight(),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(MovieHubDimens.Spacing.lg),
             )
 
             // Vertical track (pill)
             Box(
                 modifier = Modifier
-                    .width(3.dp)
+                    .width(MovieHubDimens.Spacing.dp3)
                     .weight(1f)
                     .background(
                         Color.White.copy(alpha = 0.12f),
-                        RoundedCornerShape(2.dp)
+                        RoundedCornerShape(MovieHubDimens.Spacing.dp2),
                     ),
-                contentAlignment = Alignment.BottomCenter
+                contentAlignment = Alignment.BottomCenter,
             ) {
                 Box(
                     modifier = Modifier
@@ -1073,8 +1195,8 @@ fun SideSliderIndicator(
                         .fillMaxHeight(value.coerceIn(0f, 1f))
                         .background(
                             MaterialTheme.colorScheme.primary,
-                            RoundedCornerShape(2.dp)
-                        )
+                            RoundedCornerShape(MovieHubDimens.Spacing.dp2),
+                        ),
                 )
             }
 
@@ -1083,9 +1205,9 @@ fun SideSliderIndicator(
                 text = "${(value.coerceIn(0f, 1f) * 100).toInt()}%",
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                    fontSize = MovieHubDimens.Font.xxs,
+                    fontWeight = FontWeight.Medium,
+                ),
             )
         }
     }
@@ -1101,7 +1223,7 @@ private fun DebugOverlay(
     brightness: Float,
     volume: Float,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val streamUrl = stream?.url ?: stream?.externalUrl ?: ""
     Box(
@@ -1110,22 +1232,22 @@ private fun DebugOverlay(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onDismiss
+                onClick = onDismiss,
             ),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .padding(MovieHubDimens.Spacing.xxl)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
         ) {
             Text(
                 text = "🎬 Debug Info",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
             )
             HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
 
@@ -1138,9 +1260,13 @@ private fun DebugOverlay(
 
             val resStr = if (playbackState.videoWidth > 0 && playbackState.videoHeight > 0) {
                 "${playbackState.videoWidth}x${playbackState.videoHeight}"
-            } else "N/A"
+            } else {
+                "N/A"
+            }
             DebugRow("Resolution", resStr)
             DebugRow("Codec", playbackState.videoCodec ?: "N/A")
+            DebugRow("Decoder", playbackState.decoderName ?: "N/A")
+            DebugRow("HW Decode", if (playbackState.hardwareDecoding) "Yes" else "No")
 
             val bitrateStr = when {
                 playbackState.videoBitrate >= 1_000_000 -> "${playbackState.videoBitrate / 1_000_000}.${(playbackState.videoBitrate % 1_000_000) / 100_000} Mbps"
@@ -1148,8 +1274,22 @@ private fun DebugOverlay(
                 else -> "N/A"
             }
             DebugRow("Video Bitrate", bitrateStr)
-            DebugRow("Audio Bitrate", if (playbackState.audioBitrate > 0) "${playbackState.audioBitrate / 1000} kbps" else "N/A")
+            DebugRow("HDR Mode", playbackState.hdrMode ?: "N/A")
+            DebugRow("Dropped Frames", playbackState.droppedFrameCount.toString())
+            DebugRow("Display FPS", if (playbackState.displayFps > 0) "${playbackState.displayFps} fps" else "N/A")
             DebugRow("Video Scale", videoScale.label)
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+
+            DebugRow("Audio Codec", playbackState.audioCodec ?: "N/A")
+            DebugRow("Audio Sample Rate", if (playbackState.audioSampleRate > 0) "${playbackState.audioSampleRate} Hz" else "N/A")
+            DebugRow("Audio Channels", if (playbackState.audioChannels > 0) playbackState.audioChannels.toString() else "N/A")
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+
+            DebugRow("Demuxer", playbackState.demuxerName ?: "N/A")
+            DebugRow("Container", playbackState.containerFormat ?: "N/A")
+            DebugRow("Backend", playbackState.backendInfo?.name ?: playbackState.backendInfo?.backend?.name ?: "N/A")
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
 
@@ -1188,14 +1328,14 @@ private fun DebugOverlay(
             DebugRow("Subtitle Track", selSub?.let { "${it.label} (${it.language ?: "unknown"})" } ?: "Off (${playbackState.subtitleTracks.size} available)")
             DebugRow("Cue Count", "${playbackState.currentCueCount}")
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.lg))
 
             Text(
                 text = "Tap anywhere to dismiss",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -1204,17 +1344,17 @@ private fun DebugOverlay(
 @Composable
 private fun DebugRow(
     label: String,
-    value: String
+    value: String,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f),
-            modifier = Modifier.weight(0.35f)
+            modifier = Modifier.weight(0.35f),
         )
         Text(
             text = value,
@@ -1223,7 +1363,7 @@ private fun DebugRow(
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(0.65f),
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -1234,8 +1374,8 @@ private fun formatDuration(ms: Long): String {
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
     return if (hours > 0) {
-        "${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+        "$hours:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
     } else {
-        "${minutes}:${seconds.toString().padStart(2, '0')}"
+        "$minutes:${seconds.toString().padStart(2, '0')}"
     }
 }

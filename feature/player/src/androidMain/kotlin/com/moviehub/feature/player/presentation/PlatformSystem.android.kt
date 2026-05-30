@@ -24,11 +24,15 @@ actual fun rememberSystemBrightness(): Float {
         try {
             val current = android.provider.Settings.System.getInt(
                 context.contentResolver,
-                android.provider.Settings.System.SCREEN_BRIGHTNESS
+                android.provider.Settings.System.SCREEN_BRIGHTNESS,
             )
             current.toFloat() / 255f
-        } catch (_: Exception) { 1f }
+        } catch (_: Exception) {
+            1f
+        }
     }
 }
 
 internal actual fun playerTimeMillis(): Long = System.currentTimeMillis()
+
+actual val isIosPlatform: Boolean = false

@@ -16,3 +16,5 @@ expect fun rememberSystemBrightness(): Float
 
 /** Platform-specific current time in milliseconds since Unix epoch. */
 internal expect fun playerTimeMillis(): Long
+
+expect val isIosPlatform: Boolean
