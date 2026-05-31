@@ -20,6 +20,7 @@ A **Kotlin Multiplatform** media hub for the Stremio addon ecosystem — browse 
 ### 🎬 Player
 - **Cross-Platform** — ExoPlayer (Android) + AVPlayer (iOS) with consistent custom overlay controls.
 - **Full Controls** — Speed (0.5x–2x), audio track selection, subtitle track selection, video scale (Fit/Fill/Zoom/Stretch), free zoom with pinch gestures, brightness/volume swipe gestures.
+- **Widescreen Subtitle Styling Center** — Premium side-by-side 50/50 dashboard with a real-time WYSIWYG preview. Advanced typography (font family, letter-spacing, line-height), colors (circles palette), effects (outline/shadow), 5 built-in presets (Netflix, Prime, Disney+), custom saving/renaming/deleting, clipboard JSON import/export, and Room DB auto-saving.
 - **Watch Progress** — Auto-saves every 15s, on pause, and at 90% completion (marks as watched). Resume overlay with saved position. Continue Watching section on Home.
 - **DRM** — License URL + scheme passthrough on Android via Media3. iOS logs a warning (Widevine unsupported on AVPlayer).
 - **Stream Switching** — Switch sources mid-playback. Position preserved and auto-sought on the new stream.

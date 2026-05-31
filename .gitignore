@@ -55,8 +55,6 @@ GoogleService-Info.plist
 # Local Environment Configs
 .env
 .env.*
-local.properties
-secrets.properties
 
 # OS-Specific system files
 Thumbs.db
