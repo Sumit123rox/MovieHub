@@ -1,0 +1,13 @@
+# Lefthook Git Hooks Configuration
+# Fast, concurrent pre-commit validation for MovieHub
+
+pre-commit:
+  parallel: true
+  commands:
+    spotless:
+      glob: "*.{kt,kts}"
+      run: ./gradlew spotlessApply
+      stage_fixed: true
+    detekt:
+      glob: "*.kt"
+      run: ./gradlew detekt

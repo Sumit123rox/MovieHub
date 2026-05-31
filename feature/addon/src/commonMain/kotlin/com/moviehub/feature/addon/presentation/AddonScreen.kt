@@ -1,11 +1,9 @@
 package com.moviehub.feature.addon.presentation
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -44,9 +42,9 @@ import com.moviehub.core.ui.components.TechnicalBadge
 import com.moviehub.core.ui.theme.MovieHubColors
 import kotlinx.coroutines.flow.collectLatest
 import moviehub.core.ui.generated.resources.Res
-import moviehub.core.ui.generated.resources.install_addon
 import moviehub.core.ui.generated.resources.addon_url_hint
 import moviehub.core.ui.generated.resources.install
+import moviehub.core.ui.generated.resources.install_addon
 import moviehub.core.ui.generated.resources.installed_addons
 import moviehub.core.ui.generated.resources.no_addons_installed
 import org.jetbrains.compose.resources.stringResource
@@ -55,7 +53,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun AddonScreen(
     addonViewModel: AddonViewModel = koinViewModel(),
-    pluginsViewModel: PluginsViewModel = koinViewModel()
+    pluginsViewModel: PluginsViewModel = koinViewModel(),
 ) {
     val addonState by addonViewModel.state.collectAsState()
     val pluginsState by pluginsViewModel.state.collectAsState()
@@ -72,13 +70,13 @@ fun AddonScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.background),
         ) {
             // Screen Header
             Text(
@@ -86,7 +84,7 @@ fun AddonScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
 
             // Tabs to switch between Stremio Addons and JS Scrapers
@@ -96,7 +94,7 @@ fun AddonScreen(
                 contentColor = MaterialTheme.colorScheme.primary,
                 divider = {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
+                },
             ) {
                 Tab(
                     selected = selectedTab == 0,
@@ -105,9 +103,9 @@ fun AddonScreen(
                         Text(
                             text = "Stremio Addons",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
-                    }
+                    },
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -116,9 +114,9 @@ fun AddonScreen(
                         Text(
                             text = "JS Scrapers",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
-                    }
+                    },
                 )
             }
 
@@ -130,7 +128,7 @@ fun AddonScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         item {
                             ContentCard(modifier = Modifier.fillMaxWidth()) {
@@ -139,7 +137,7 @@ fun AddonScreen(
                                         text = stringResource(Res.string.install_addon),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onBackground,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
                                     OutlinedTextField(
@@ -147,19 +145,19 @@ fun AddonScreen(
                                         onValueChange = { addonViewModel.onAction(AddonAction.UrlChanged(it)) },
                                         modifier = Modifier.fillMaxWidth(),
                                         label = { Text(stringResource(Res.string.addon_url_hint)) },
-                                        singleLine = true
+                                        singleLine = true,
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(
                                         onClick = { addonViewModel.onAction(AddonAction.InstallAddon) },
                                         modifier = Modifier.align(Alignment.End),
-                                        enabled = addonState.addonUrl.isNotBlank() && !addonState.isInstalling
+                                        enabled = addonState.addonUrl.isNotBlank() && !addonState.isInstalling,
                                     ) {
                                         if (addonState.isInstalling) {
                                             CircularProgressIndicator(
                                                 modifier = Modifier.width(20.dp).height(20.dp),
                                                 color = MaterialTheme.colorScheme.onPrimary,
-                                                strokeWidth = 2.dp
+                                                strokeWidth = 2.dp,
                                             )
                                         } else {
                                             Text(stringResource(Res.string.install))
@@ -175,7 +173,7 @@ fun AddonScreen(
                                     text = it,
                                     color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         }
@@ -186,7 +184,7 @@ fun AddonScreen(
                                     text = it,
                                     color = MovieHubColors.Success,
                                     style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         }
@@ -197,7 +195,7 @@ fun AddonScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 8.dp)
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                         }
 
@@ -207,7 +205,7 @@ fun AddonScreen(
                                     text = stringResource(Res.string.no_addons_installed),
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         } else {
@@ -222,20 +220,20 @@ fun AddonScreen(
                                                 addonUrl?.let { url ->
                                                     clipboardManager.setText(AnnotatedString(url))
                                                 }
-                                            }
-                                        )
+                                            },
+                                        ),
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = addon.name,
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                 )
                                                 var descExpanded by remember { mutableStateOf(false) }
                                                 val descMaxLines = if (descExpanded) Int.MAX_VALUE else 2
@@ -244,7 +242,7 @@ fun AddonScreen(
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = descMaxLines,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                                 if ((addon.description?.length ?: 0) > 100) {
                                                     Text(
@@ -252,7 +250,7 @@ fun AddonScreen(
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.primary,
                                                         fontWeight = FontWeight.SemiBold,
-                                                        modifier = Modifier.clickable { descExpanded = !descExpanded }
+                                                        modifier = Modifier.clickable { descExpanded = !descExpanded },
                                                     )
                                                 }
                                             }
@@ -262,7 +260,7 @@ fun AddonScreen(
                                                         Icon(
                                                             imageVector = Icons.Default.Settings,
                                                             contentDescription = "Configure",
-                                                            tint = MaterialTheme.colorScheme.primary
+                                                            tint = MaterialTheme.colorScheme.primary,
                                                         )
                                                     }
                                                 }
@@ -270,14 +268,14 @@ fun AddonScreen(
                                                     Icon(
                                                         imageVector = Icons.Default.Refresh,
                                                         contentDescription = "Refresh",
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
                                                 IconButton(onClick = { addonViewModel.onAction(AddonAction.RemoveAddon(addon.id)) }) {
                                                     Icon(
                                                         imageVector = Icons.Default.Delete,
                                                         contentDescription = "Delete",
-                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                                                     )
                                                 }
                                             }
@@ -301,7 +299,7 @@ fun AddonScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         // Global toggle
                         item {
@@ -309,24 +307,24 @@ fun AddonScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = "Enable JS Scrapers",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            color = MaterialTheme.colorScheme.onSurface,
                                         )
                                         Text(
                                             text = "Use local JS scraper plugins to discover streams",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                     Switch(
                                         checked = pluginsState.coreState.pluginsEnabled,
-                                        onCheckedChange = { pluginsViewModel.onAction(PluginsAction.TogglePluginsEnabled(it)) }
+                                        onCheckedChange = { pluginsViewModel.onAction(PluginsAction.TogglePluginsEnabled(it)) },
                                     )
                                 }
                             }
@@ -340,7 +338,7 @@ fun AddonScreen(
                                         text = "Install Scraper Repository",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onBackground,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
                                     OutlinedTextField(
@@ -348,19 +346,19 @@ fun AddonScreen(
                                         onValueChange = { pluginsViewModel.onAction(PluginsAction.UrlInputChanged(it)) },
                                         modifier = Modifier.fillMaxWidth(),
                                         label = { Text("Repository Manifest URL (manifest.json)") },
-                                        singleLine = true
+                                        singleLine = true,
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(
                                         onClick = { pluginsViewModel.onAction(PluginsAction.InstallRepository) },
                                         modifier = Modifier.align(Alignment.End),
-                                        enabled = pluginsState.repoUrlInput.isNotBlank() && !pluginsState.coreState.isInstalling
+                                        enabled = pluginsState.repoUrlInput.isNotBlank() && !pluginsState.coreState.isInstalling,
                                     ) {
                                         if (pluginsState.coreState.isInstalling) {
                                             CircularProgressIndicator(
                                                 modifier = Modifier.width(20.dp).height(20.dp),
                                                 color = MaterialTheme.colorScheme.onPrimary,
-                                                strokeWidth = 2.dp
+                                                strokeWidth = 2.dp,
                                             )
                                         } else {
                                             Text("Install Repo")
@@ -376,7 +374,7 @@ fun AddonScreen(
                                     text = it,
                                     color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         }
@@ -387,7 +385,7 @@ fun AddonScreen(
                                     text = it,
                                     color = MovieHubColors.Success,
                                     style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         }
@@ -399,7 +397,7 @@ fun AddonScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 8.dp)
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                         }
 
@@ -409,7 +407,7 @@ fun AddonScreen(
                                     text = "No scraper repositories installed yet.",
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         } else {
@@ -421,44 +419,44 @@ fun AddonScreen(
                                             onClick = { },
                                             onLongClick = {
                                                 clipboardManager.setText(AnnotatedString(repo.manifestUrl))
-                                            }
-                                        )
+                                            },
+                                        ),
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = repo.name,
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                 )
                                                 Text(
                                                     text = repo.manifestUrl,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
                                             Row {
                                                 IconButton(
-                                                    onClick = { pluginsViewModel.onAction(PluginsAction.RefreshRepository(repo.manifestUrl)) }
+                                                    onClick = { pluginsViewModel.onAction(PluginsAction.RefreshRepository(repo.manifestUrl)) },
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Default.Refresh,
                                                         contentDescription = "Refresh",
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
                                                 IconButton(
-                                                    onClick = { pluginsViewModel.onAction(PluginsAction.RemoveRepository(repo.manifestUrl)) }
+                                                    onClick = { pluginsViewModel.onAction(PluginsAction.RemoveRepository(repo.manifestUrl)) },
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Default.Delete,
                                                         contentDescription = "Delete",
-                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                                                     )
                                                 }
                                             }
@@ -476,7 +474,7 @@ fun AddonScreen(
                                             Text(
                                                 text = it,
                                                 color = MaterialTheme.colorScheme.error,
-                                                style = MaterialTheme.typography.bodySmall
+                                                style = MaterialTheme.typography.bodySmall,
                                             )
                                         }
                                     }
@@ -491,7 +489,7 @@ fun AddonScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 8.dp)
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                         }
 
@@ -501,7 +499,7 @@ fun AddonScreen(
                                     text = "No scraper providers available.",
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 )
                             }
                         } else {
@@ -510,25 +508,25 @@ fun AddonScreen(
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = scraper.name,
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                 )
                                                 Text(
                                                     text = scraper.description.ifBlank { "No description provided." },
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
                                             Switch(
                                                 checked = scraper.enabled,
                                                 onCheckedChange = { pluginsViewModel.onAction(PluginsAction.ToggleScraper(scraper.id, it)) },
-                                                enabled = scraper.manifestEnabled && pluginsState.coreState.pluginsEnabled
+                                                enabled = scraper.manifestEnabled && pluginsState.coreState.pluginsEnabled,
                                             )
                                         }
                                         Spacer(modifier = Modifier.height(8.dp))

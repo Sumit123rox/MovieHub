@@ -5,13 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.SearchHistoryDao
 import com.moviehub.core.database.SearchHistoryEntity
+import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.feature.search.data.SearchRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import com.moviehub.core.utils.PerformanceMonitor
+import kotlinx.coroutines.withTimeout
 
 class SearchViewModel(
     private val repository: SearchRepository,
@@ -51,7 +52,7 @@ class SearchViewModel(
                     try {
                         searchHistoryDao.getRecentSearches(profileId).collect { history ->
                             _state.value = _state.value.copy(
-                                recentSearches = history.map { it.query }
+                                recentSearches = history.map { it.query },
                             )
                         }
                     } catch (e: Exception) {
@@ -79,15 +80,20 @@ class SearchViewModel(
                 val profileId = profileRepository.activeProfile.value?.id
                 if (profileId != null) {
                     searchHistoryDao.insertSearch(
-                        SearchHistoryEntity(query = currentQuery, profileId = profileId)
+                        SearchHistoryEntity(query = currentQuery, profileId = profileId),
                     )
                 }
 
-                val results = repository.searchMovies(currentQuery)
+                val results = withTimeout(15_000) { repository.searchMovies(currentQuery) }
                 _state.value = _state.value.copy(
                     isLoading = false,
                     results = results,
-                    error = if (results.isEmpty()) "No results found for '$currentQuery'" else null
+                    error = if (results.isEmpty()) "No results found for '$currentQuery'" else null,
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Search failed",
                 )
             } finally {
                 PerformanceMonitor.endSection()

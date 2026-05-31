@@ -5,12 +5,12 @@ import com.moviehub.core.utils.currentTimeMillis
 
 enum class ContentType {
     MOVIE,
-    SHOW
+    SHOW,
 }
 
 @Entity(
     tableName = "favorites",
-    primaryKeys = ["contentId", "profileId"]
+    primaryKeys = ["contentId", "profileId"],
 )
 data class FavoriteEntity(
     val contentId: String,
@@ -18,5 +18,5 @@ data class FavoriteEntity(
     val contentType: ContentType,
     val title: String,
     val posterUrl: String?,
-    val addedTimestamp: Long = currentTimeMillis()
+    val addedTimestamp: Long = currentTimeMillis(),
 )

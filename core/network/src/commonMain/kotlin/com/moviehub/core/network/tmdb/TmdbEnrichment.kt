@@ -87,7 +87,9 @@ class TmdbEnrichmentService(
             val tmdbPerson = tmdbCastMap[person.name.lowercase()]
             if (tmdbPerson != null) {
                 person.copy(photo = TmdbImageUrl.profile(tmdbPerson.profilePath) ?: person.photo)
-            } else person
+            } else {
+                person
+            }
         }
 
         return media.copy(cast = enrichedCast)
@@ -313,8 +315,12 @@ class TmdbEnrichmentService(
                         )
                     } ?: emptyList<MediaVideo>()
                 }
-            } else emptyList()
-        } else media.videos
+            } else {
+                emptyList()
+            }
+        } else {
+            media.videos
+        }
 
         // Cast photos + TMDB ID enrichment
         val enrichedCast = if (media.cast.isNotEmpty() && credits != null) {
@@ -331,21 +337,27 @@ class TmdbEnrichmentService(
                     )
                 } ?: person
             }
-        } else media.cast
+        } else {
+            media.cast
+        }
 
         // Directors & Writers from TMDB crew (only if not already present)
         val enrichedDirectors = if (media.directors.isEmpty() && credits != null) {
             credits.crew
                 .filter { it.job?.lowercase() == "director" }
                 .map { it.name }
-        } else media.directors
+        } else {
+            media.directors
+        }
 
         val enrichedWriters = if (media.writers.isEmpty() && credits != null) {
             credits.crew
                 .filter { it.job?.lowercase() in listOf("writer", "screenplay", "story", "teleplay") }
                 .map { it.name }
                 .distinct()
-        } else media.writers
+        } else {
+            media.writers
+        }
 
         // Production companies & networks from TMDB details
         val enrichedProductionCompanies = if (media.productionCompanies.isEmpty()) {
@@ -364,7 +376,9 @@ class TmdbEnrichmentService(
                 }?.filter { it.name.isNotBlank() }.orEmpty()
                 else -> media.productionCompanies
             }
-        } else media.productionCompanies
+        } else {
+            media.productionCompanies
+        }
 
         val enrichedNetworks = if (media.networks.isEmpty()) {
             when (details) {
@@ -376,7 +390,9 @@ class TmdbEnrichmentService(
                 }?.filter { it.name.isNotBlank() }.orEmpty()
                 else -> media.networks
             }
-        } else media.networks
+        } else {
+            media.networks
+        }
 
         // Country & language fallback from TMDB details
         val enrichedCountry = if (media.country.isNullOrBlank()) {
@@ -385,12 +401,16 @@ class TmdbEnrichmentService(
                 is TmdbTvDetails -> details.originCountry?.firstOrNull()
                 else -> null
             }
-        } else media.country
+        } else {
+            media.country
+        }
 
         val enrichedLanguage = if (media.language.isNullOrBlank()) {
             (details as? TmdbMovieDetails)?.originalLanguage?.uppercase()
                 ?: (details as? TmdbTvDetails)?.originalLanguage?.uppercase()
-        } else media.language
+        } else {
+            media.language
+        }
 
         // Status & tagline from TMDB
         val enrichedStatus = media.status ?: when (details) {
@@ -412,7 +432,9 @@ class TmdbEnrichmentService(
                 is TmdbTvDetails -> details.overview
                 else -> null
             }
-        } else media.description
+        } else {
+            media.description
+        }
 
         // More like this (only if empty)
         val moreLikeThis = if (media.moreLikeThis.isEmpty()) {
@@ -428,7 +450,9 @@ class TmdbEnrichmentService(
                         type = if (rec.mediaType == "tv") "series" else "movie",
                     )
                 } ?: media.moreLikeThis
-        } else media.moreLikeThis
+        } else {
+            media.moreLikeThis
+        }
 
         // Backfill poster/background from TMDB when addon metadata lacks them
         val enrichedPosterUrl = media.posterUrl ?: TmdbImageUrl.poster(
@@ -436,14 +460,14 @@ class TmdbEnrichmentService(
                 is TmdbMovieDetails -> details.posterPath
                 is TmdbTvDetails -> details.posterPath
                 else -> null
-            }
+            },
         )
         val enrichedBackgroundUrl = media.backgroundUrl ?: TmdbImageUrl.backdrop(
             when (details) {
                 is TmdbMovieDetails -> details.backdropPath
                 is TmdbTvDetails -> details.backdropPath
                 else -> null
-            }
+            },
         )
 
         media.copy(
@@ -505,7 +529,9 @@ class TmdbEnrichmentService(
                 if (year != null) {
                     val resultYear = if (mediaType == "movie") result.releaseDate?.take(4) else result.firstAirDate?.take(4)
                     resultYear == null || resultYear == year
-                } else true
+                } else {
+                    true
+                }
             }
             if (result != null) {
                 return TmdbFindResult(

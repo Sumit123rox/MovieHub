@@ -1,8 +1,6 @@
 package com.moviehub.navigation
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -12,12 +10,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -30,13 +27,11 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -44,6 +39,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.model.PlayerLaunch
 import com.moviehub.core.model.PlayerLaunchStore
 import com.moviehub.feature.addon.presentation.AddonScreen
@@ -56,14 +52,13 @@ import com.moviehub.feature.home.presentation.HomeScreen
 import com.moviehub.feature.player.presentation.PlayerScreen
 import com.moviehub.feature.profile.presentation.AppearanceScreen
 import com.moviehub.feature.profile.presentation.DownloadsScreen
+import com.moviehub.feature.profile.presentation.LibraryScreen
 import com.moviehub.feature.profile.presentation.ProfileScreen
-import com.moviehub.feature.profile.presentation.ProfileViewModel
 import com.moviehub.feature.profile.presentation.SettingsScreen
 import com.moviehub.feature.search.presentation.SearchScreen
 import com.moviehub.feature.sync.presentation.SyncScreen
-import org.koin.compose.koinInject
-import com.moviehub.core.database.ProfileRepository
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -78,7 +73,7 @@ fun RootNavGraph() {
             viewModel = koinViewModel(),
             onProfileSelected = {
                 // activeProfile is now set; this composable recomposes and renders NavHost
-            }
+            },
         )
         return
     }
@@ -89,44 +84,55 @@ fun RootNavGraph() {
         bottomBar = {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
-            
+
             // Only show bottom bar when active profile is selected and not on the profile choose screen itself
-            val isBottomBarVisible = activeProfile != null && currentDestination?.hierarchy?.any { 
-                (it.route?.contains("Home") == true || 
-                it.route?.contains("Search") == true || 
-                it.route?.contains("Sync") == true || 
-                it.route?.contains("Addon") == true ||
-                it.route?.contains("Settings") == true) &&
-                it.route?.contains("Profile") != true
-            } == true
-            
+            val isBottomBarVisible =
+                activeProfile != null && currentDestination?.hierarchy?.any {
+                    (
+                        it.route?.contains("Home") == true ||
+                            it.route?.contains("Search") == true ||
+                            it.route?.contains("Sync") == true ||
+                            it.route?.contains("Addon") == true ||
+                            it.route?.contains("Library") == true ||
+                            it.route?.contains("Settings") == true
+                        ) &&
+                        it.route?.contains("Profile") != true
+                } == true
+
             AnimatedVisibility(
                 visible = isBottomBarVisible,
                 enter = fadeIn(animationSpec = tween(300)),
-                exit = fadeOut(animationSpec = tween(300))
+                exit = fadeOut(animationSpec = tween(300)),
             ) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary
+                    contentColor = MaterialTheme.colorScheme.primary,
                 ) {
-                    val items = listOf(
-                        NavigationItem("Home", Screen.Home, Icons.Default.Home),
-                        NavigationItem("Search", Screen.Search, Icons.Default.Search),
-                        NavigationItem("Sync", Screen.Sync, Icons.Default.Sync),
-                        NavigationItem("Addons", Screen.Addon, Icons.Default.Extension),
-                        NavigationItem("Profile", Screen.Settings, Icons.Default.Person)
-                    )
-                    
+                    val items =
+                        listOf(
+                            NavigationItem("Home", Screen.Home, Icons.Default.Home),
+                            NavigationItem("Search", Screen.Search, Icons.Default.Search),
+                            NavigationItem("Sync", Screen.Sync, Icons.Default.Sync),
+                            NavigationItem("Library", Screen.Library, Icons.Default.Bookmark),
+                            NavigationItem("Profile", Screen.Settings, Icons.Default.Person),
+                        )
+
                     items.forEach { item ->
-                        val isSelected = currentDestination?.hierarchy?.any { it.route?.contains(item.screen::class.simpleName ?: "") == true } == true
-                        
+                        val isSelected =
+                            currentDestination?.hierarchy?.any {
+                                it.route?.contains(
+                                    item.screen::class.simpleName ?: "",
+                                ) == true
+                            } == true
+
                         val iconScale by animateFloatAsState(
                             targetValue = if (isSelected) 1.15f else 1f,
-                            animationSpec = spring(
+                            animationSpec =
+                            spring(
                                 dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
+                                stiffness = Spring.StiffnessLow,
                             ),
-                            label = "nav_icon_scale"
+                            label = "nav_icon_scale",
                         )
 
                         NavigationBarItem(
@@ -134,7 +140,7 @@ fun RootNavGraph() {
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = item.label,
-                                    modifier = Modifier.scale(iconScale)
+                                    modifier = Modifier.scale(iconScale),
                                 )
                             },
                             label = { Text(item.label) },
@@ -159,30 +165,32 @@ fun RootNavGraph() {
                                     }
                                 }
                             },
-                            colors = NavigationBarItemDefaults.colors(
+                            colors =
+                            NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
+                                indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                            ),
                         )
                     }
                 }
             }
-        }
+        },
     ) { paddingValues ->
         NavHost(
             navController = navController,
             startDestination = Screen.Home,
-            modifier = Modifier
+            modifier =
+            Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(bottom = paddingValues.calculateBottomPadding()),
             enterTransition = { fadeIn(animationSpec = tween(300)) + slideInHorizontally(initialOffsetX = { it / 10 }) },
             exitTransition = { fadeOut(animationSpec = tween(300)) + slideOutHorizontally(targetOffsetX = { -it / 10 }) },
             popEnterTransition = { fadeIn(animationSpec = tween(300)) + slideInHorizontally(initialOffsetX = { -it / 10 }) },
-            popExitTransition = { fadeOut(animationSpec = tween(300)) + slideOutHorizontally(targetOffsetX = { it / 10 }) }
+            popExitTransition = { fadeOut(animationSpec = tween(300)) + slideOutHorizontally(targetOffsetX = { it / 10 }) },
         ) {
             composable<Screen.Home> {
                 HomeScreen(
@@ -197,7 +205,7 @@ fun RootNavGraph() {
                     },
                     onResumeClick = { mediaId, type ->
                         navController.navigate(Screen.Streams(mediaId, type, mediaId))
-                    }
+                    },
                 )
             }
             composable<Screen.Catalog> { backStackEntry ->
@@ -207,17 +215,17 @@ fun RootNavGraph() {
                     type = catalog.type,
                     catalogId = catalog.catalogId,
                     addonId = catalog.addonId,
-                    onMediaClick = { id, type, addonUrl -> 
+                    onMediaClick = { id, type, addonUrl ->
                         navController.navigate(Screen.Details(id, type, addonUrl))
                     },
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             composable<Screen.Search> {
                 SearchScreen(
-                    onMediaClick = { id, type -> 
+                    onMediaClick = { id, type ->
                         navController.navigate(Screen.Details(id, type))
-                    }
+                    },
                 )
             }
             composable<Screen.Addon> {
@@ -242,17 +250,31 @@ fun RootNavGraph() {
                     },
                     onNavigateToDownloads = {
                         navController.navigate(Screen.Downloads)
-                    }
+                    },
+                    onNavigateToAddons = {
+                        navController.navigate(Screen.Addon)
+                    },
+                    onNavigateToAuth = {
+                        navController.navigate(Screen.Auth)
+                    },
                 )
             }
             composable<Screen.Appearance> {
                 AppearanceScreen(
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
+                )
+            }
+            composable<Screen.Library> {
+                LibraryScreen(
+                    onMediaClick = { id, type ->
+                        navController.navigate(Screen.Details(id, type))
+                    },
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             composable<Screen.Downloads> {
                 DownloadsScreen(
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             composable<Screen.Auth> {
@@ -277,7 +299,7 @@ fun RootNavGraph() {
                         if (tmdbId != null) {
                             navController.navigate(Screen.PersonDetail(tmdbId, person.name))
                         }
-                    }
+                    },
                 )
             }
             composable<Screen.PersonDetail> { backStackEntry ->
@@ -288,7 +310,7 @@ fun RootNavGraph() {
                     onBackClick = { navController.popBackStack() },
                     onMediaClick = { id, type ->
                         navController.navigate(Screen.Details(id, type))
-                    }
+                    },
                 )
             }
             composable<Screen.Streams> { backStackEntry ->
@@ -298,19 +320,20 @@ fun RootNavGraph() {
                     type = streams.type,
                     mediaId = streams.mediaId,
                     onPlayClick = { stream, allStreams, title, posterUrl ->
-                        val launchId = PlayerLaunchStore.put(
-                            PlayerLaunch(
-                                stream = stream,
-                                streams = allStreams,
-                                title = title,
-                                mediaId = streams.id,
-                                mediaType = streams.type,
-                                posterUrl = posterUrl
+                        val launchId =
+                            PlayerLaunchStore.put(
+                                PlayerLaunch(
+                                    stream = stream,
+                                    streams = allStreams,
+                                    title = title,
+                                    mediaId = streams.id,
+                                    mediaType = streams.type,
+                                    posterUrl = posterUrl,
+                                ),
                             )
-                        )
                         navController.navigate(Screen.Player(launchId))
                     },
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
                 )
             }
             composable<Screen.Player> { backStackEntry ->
@@ -324,7 +347,7 @@ fun RootNavGraph() {
                         mediaId = launch.mediaId,
                         mediaType = launch.mediaType,
                         posterUrl = launch.posterUrl,
-                        onBackClick = { navController.popBackStack() }
+                        onBackClick = { navController.popBackStack() },
                     )
                 } else {
                     navController.popBackStack()
@@ -337,5 +360,5 @@ fun RootNavGraph() {
 private data class NavigationItem(
     val label: String,
     val screen: Screen,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
 )

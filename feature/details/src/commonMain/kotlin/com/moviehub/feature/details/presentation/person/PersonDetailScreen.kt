@@ -1,17 +1,13 @@
 package com.moviehub.feature.details.presentation.person
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -23,7 +19,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaPreview
@@ -84,7 +79,7 @@ fun PersonDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MaterialTheme.colorScheme.background),
     ) {
         when {
             uiState.isLoading -> PersonDetailSkeleton()
@@ -92,7 +87,7 @@ fun PersonDetailScreen(
                 error = uiState.error!!,
                 onRetry = {
                     uiState = uiState.copy(isLoading = true, error = null)
-                }
+                },
             )
             uiState.person != null -> PersonDetailContent(
                 person = uiState.person!!,
@@ -106,12 +101,12 @@ fun PersonDetailScreen(
             onClick = onBackClick,
             modifier = Modifier
                 .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp, start = 8.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
-                tint = MaterialTheme.colorScheme.onSurface
+                tint = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
@@ -125,7 +120,7 @@ private fun PersonDetailContent(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 32.dp)
+        contentPadding = PaddingValues(bottom = 32.dp),
     ) {
         item {
             PersonHeroSection(person = person)
@@ -138,7 +133,7 @@ private fun PersonDetailContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
                     Text(
                         text = "Biography",
@@ -176,19 +171,19 @@ private fun PersonDetailContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(top = 16.dp, bottom = 8.dp),
                 ) {
                     Text(
                         text = "Known For",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         items(credits) { preview ->
                             Poster(
@@ -224,7 +219,7 @@ private fun PersonHeroSection(
             modifier = Modifier
                 .size(160.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (person.photoUrl != null) {
                 KamelImage(
@@ -270,19 +265,19 @@ private fun PersonHeroSection(
             if (person.birthday != null) {
                 InfoChip(
                     label = "Born",
-                    value = formatDateForDisplay(person.birthday)
+                    value = formatDateForDisplay(person.birthday),
                 )
             }
             if (person.deathday != null) {
                 InfoChip(
                     label = "Died",
-                    value = formatDateForDisplay(person.deathday)
+                    value = formatDateForDisplay(person.deathday),
                 )
             }
             if (person.placeOfBirth != null) {
                 InfoChip(
                     label = "From",
-                    value = person.placeOfBirth
+                    value = person.placeOfBirth,
                 )
             }
         }
@@ -327,7 +322,7 @@ private fun PersonDetailSkeleton() {
             modifier = Modifier
                 .size(160.dp)
                 .clip(CircleShape)
-                .shimmerEffect()
+                .shimmerEffect(),
         )
         Spacer(modifier = Modifier.height(16.dp))
         Box(modifier = Modifier.width(200.dp).height(24.dp).clip(RoundedCornerShape(4.dp)).shimmerEffect())
@@ -370,7 +365,7 @@ private fun formatDateForDisplay(dateStr: String): String {
     if (parts.size != 3) return dateStr
     val monthNames = listOf(
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     )
     val year = parts[0]
     val month = parts[1].toIntOrNull()?.let { monthNames.getOrNull(it - 1) } ?: parts[1]

@@ -15,8 +15,16 @@ actual class PlatformDownloader actual constructor(private val ctx: PlatformCont
     actual fun pause(taskId: String) {}
     actual fun resume(taskId: String) {}
     actual fun cancel(taskId: String) {}
-    
+
     actual fun getProgress(taskId: String): Flow<DownloadProgress> = flow {
         // iOS progress tracking would go here
+    }
+
+    actual fun getStorageInfo(): StorageInfo {
+        return StorageInfo(
+            totalBytes = 256L * 1024L * 1024L * 1024L,
+            freeBytes = 100L * 1024L * 1024L * 1024L,
+            appBytes = 120L * 1024L * 1024L
+        )
     }
 }

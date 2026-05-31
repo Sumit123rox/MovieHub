@@ -13,7 +13,7 @@ enum class AccentType(val label: String) {
     TEAL("Teal"),
     YELLOW("Yellow"),
     CYAN("Cyan"),
-    ROSE("Rose")
+    ROSE("Rose"),
 }
 
 data class AccentPalette(
@@ -129,7 +129,7 @@ enum class ThemeType(val label: String) {
     NUVIO_DARK("Nuvio Dark"),
     AMOLED_DARK("AMOLED Dark"),
     SEPIA("Sepia"),
-    MOCHA("Mocha")
+    MOCHA("Mocha"),
 }
 
 data class ThemePalette(

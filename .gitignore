@@ -22,9 +22,41 @@ node_modules/
 .claude/
 .junie/
 _bmad/
+_bmad-output/
 .antigravitycli/
 
 # AI Generated Documentation
 project-context.md
 ARCHITECTURE.md
 docs/
+
+# Graphify Knowledge Graph (auto-generated)
+graphify-out/
+
+# Temp refactor artifacts
+*.dimenrefactor
+
+# Keystores & Signing Credentials (Android)
+*.jks
+*.keystore
+*.pepk
+secrets.properties
+google-services.json
+
+# Certificates & Provisioning Profiles (iOS)
+*.mobileprovision
+*.cer
+*.p12
+*.p7b
+*.key
+*.pem
+GoogleService-Info.plist
+
+# Local Environment Configs
+.env
+.env.*
+local.properties
+secrets.properties
+
+# OS-Specific system files
+Thumbs.db

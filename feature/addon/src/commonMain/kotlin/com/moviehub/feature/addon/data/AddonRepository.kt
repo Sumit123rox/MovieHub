@@ -1,8 +1,8 @@
 package com.moviehub.feature.addon.data
 
-import com.moviehub.core.network.StremioApiClient
-import com.moviehub.core.network.AddonManager
 import com.moviehub.core.model.StremioManifest
+import com.moviehub.core.network.AddonManager
+import com.moviehub.core.network.StremioApiClient
 import kotlinx.coroutines.flow.Flow
 
 interface AddonRepository {
@@ -15,7 +15,7 @@ interface AddonRepository {
 
 class AddonRepositoryImpl(
     private val apiClient: StremioApiClient,
-    private val manager: AddonManager
+    private val manager: AddonManager,
 ) : AddonRepository {
 
     override fun getAddonUrl(addonId: String): String? {

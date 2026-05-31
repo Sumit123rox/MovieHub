@@ -7,10 +7,10 @@ plugins {
 
 kotlin {
     androidTarget()
-    
+
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "auth"
@@ -21,6 +21,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core:ui"))
+            implementation(project(":core:database"))
+            implementation(project(":core:network"))
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)

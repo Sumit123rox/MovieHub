@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
                 StrictMode.ThreadPolicy.Builder()
                     .detectAll() // Includes DiskReads, DiskWrites, Network, etc.
                     .penaltyLog()
-                    .build()
+                    .build(),
             )
         }
 

@@ -12,15 +12,15 @@ class CacheService(
     private val currentTimeMillis: () -> Long = ::cacheServiceTimeMillis,
 ) {
     companion object {
-        val CATALOG_TTL_MS: Long = 10 * 60 * 1000L       // 10 minutes
-        val META_TTL_MS: Long = 60 * 60 * 1000L           // 1 hour
-        val STREAM_TTL_MS: Long = 20 * 60 * 1000L         // 20 minutes
+        val CATALOG_TTL_MS: Long = 10 * 60 * 1000L // 10 minutes
+        val META_TTL_MS: Long = 60 * 60 * 1000L // 1 hour
+        val STREAM_TTL_MS: Long = 20 * 60 * 1000L // 20 minutes
         val MAX_CACHE_ENTRIES = 500
 
         fun catalogKey(type: String, catalogId: String, addonId: String, skip: Int = 0) =
-            "catalog:${type}:${catalogId}:${addonId}:${skip}"
-        fun metaKey(id: String) = "meta:${id}"
-        fun streamKey(id: String, type: String) = "stream:${id}:${type}"
+            "catalog:$type:$catalogId:$addonId:$skip"
+        fun metaKey(id: String) = "meta:$id"
+        fun streamKey(id: String, type: String) = "stream:$id:$type"
     }
 
     // ----- Backward-compatible (no TTL) -----

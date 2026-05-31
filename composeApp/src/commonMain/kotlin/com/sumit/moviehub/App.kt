@@ -21,15 +21,16 @@ import io.kamel.image.config.LocalKamelConfig
 import kotlinx.coroutines.flow.catch
 import org.koin.compose.koinInject
 
-val movieHubKamelConfig = KamelConfig {
-    takeFrom(KamelConfig.Default)
-    imageBitmapCacheSize = 2000
-    imageVectorCacheSize = 500
-    // Disk-backed image cache at 100 MB (HTTP response cache doubles as disk cache in Kamel)
-    httpUrlFetcher {
-        httpCache(100L * 1024 * 1024)
+val movieHubKamelConfig =
+    KamelConfig {
+        takeFrom(KamelConfig.Default)
+        imageBitmapCacheSize = 2000
+        imageVectorCacheSize = 500
+        // Disk-backed image cache at 100 MB (HTTP response cache doubles as disk cache in Kamel)
+        httpUrlFetcher {
+            httpCache(100L * 1024 * 1024)
+        }
     }
-}
 
 @Composable
 fun App() {
@@ -43,23 +44,26 @@ fun App() {
         .catch { emit(emptyList()) }
         .collectAsState(initial = emptyList())
 
-    val prefs: UserPreferencesEntity? = if (activeProfile != null) {
-        allPrefs.find { it.profileId == activeProfile?.id }
-    } else {
-        allPrefs.firstOrNull()
-    }
+    val prefs: UserPreferencesEntity? =
+        if (activeProfile != null) {
+            allPrefs.find { it.profileId == activeProfile?.id }
+        } else {
+            allPrefs.firstOrNull()
+        }
 
-    val themeType = try {
-        ThemeType.valueOf(prefs?.theme?.uppercase() ?: "NUVIO_DARK")
-    } catch (_: Exception) {
-        ThemeType.NUVIO_DARK
-    }
+    val themeType =
+        try {
+            ThemeType.valueOf(prefs?.theme?.uppercase() ?: "NUVIO_DARK")
+        } catch (_: Exception) {
+            ThemeType.NUVIO_DARK
+        }
 
-    val accentType = try {
-        AccentType.valueOf(prefs?.accentColor?.uppercase() ?: "BLUE")
-    } catch (_: Exception) {
-        AccentType.BLUE
-    }
+    val accentType =
+        try {
+            AccentType.valueOf(prefs?.accentColor?.uppercase() ?: "BLUE")
+        } catch (_: Exception) {
+            AccentType.BLUE
+        }
 
     SideEffect { PerformanceMonitor.beginSection("App.compose") }
     CompositionLocalProvider(LocalKamelConfig provides movieHubKamelConfig) {

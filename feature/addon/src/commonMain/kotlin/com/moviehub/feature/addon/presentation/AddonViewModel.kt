@@ -2,6 +2,7 @@ package com.moviehub.feature.addon.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.feature.addon.data.AddonRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,7 +11,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import com.moviehub.core.utils.PerformanceMonitor
 
 class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
     private val _state = MutableStateFlow(AddonState())
@@ -54,7 +54,7 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
         } else {
             "$base/configure"
         }
-        
+
         viewModelScope.launch {
             _event.emit(AddonEvent.OpenUrl(configUrl))
         }
@@ -122,12 +122,12 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
                     _state.value = _state.value.copy(
                         isInstalling = false,
                         successMessage = "Successfully installed ${manifest?.name}",
-                        addonUrl = ""
+                        addonUrl = "",
                     )
                 } else {
                     _state.value = _state.value.copy(
                         isInstalling = false,
-                        error = "Failed to install addon: ${result.exceptionOrNull()?.message}"
+                        error = "Failed to install addon: ${result.exceptionOrNull()?.message}",
                     )
                 }
             } finally {

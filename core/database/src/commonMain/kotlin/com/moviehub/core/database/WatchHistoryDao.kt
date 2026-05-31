@@ -27,19 +27,21 @@ interface WatchHistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWatchHistory(watchHistory: WatchHistoryEntity)
 
-    @Query("""
+    @Query(
+        """
         INSERT OR REPLACE INTO watch_history(mediaId, profileId, title, type, posterPath, lastWatchedAt)
         VALUES (:mediaId, :profileId, :title, :type,
                 COALESCE(NULLIF(:posterPath, ''), (SELECT posterPath FROM watch_history WHERE mediaId = :mediaId AND profileId = :profileId)),
                 :lastWatchedAt)
-    """)
+    """,
+    )
     suspend fun conditionalUpsertWatchHistory(
         mediaId: String,
         profileId: String,
         title: String,
         type: String,
         posterPath: String?,
-        lastWatchedAt: Long = com.moviehub.core.utils.currentTimeMillis()
+        lastWatchedAt: Long = com.moviehub.core.utils.currentTimeMillis(),
     )
 
     @Update
@@ -48,6 +50,12 @@ interface WatchHistoryDao {
     @Query("DELETE FROM watch_history WHERE mediaId = :mediaId AND profileId = :profileId")
     suspend fun deleteWatchHistory(mediaId: String, profileId: String)
 
+    @Query("DELETE FROM watch_progress WHERE mediaId = :mediaId AND profileId = :profileId")
+    suspend fun deleteWatchProgress(mediaId: String, profileId: String)
+
     @Query("DELETE FROM watch_history WHERE profileId = :profileId")
     suspend fun clearWatchHistory(profileId: String)
+
+    @Query("DELETE FROM watch_progress WHERE profileId = :profileId")
+    suspend fun clearWatchProgress(profileId: String)
 }

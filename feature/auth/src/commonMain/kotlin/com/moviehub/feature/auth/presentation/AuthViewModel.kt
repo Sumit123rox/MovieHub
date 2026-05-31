@@ -14,7 +14,7 @@ data class AuthState(
     val debridCode: String? = null,
     val isLoading: Boolean = false,
     val authSuccessMessage: String? = null,
-    val error: String? = null
+    val error: String? = null,
 )
 
 sealed interface AuthAction {
@@ -56,7 +56,7 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
             } else {
                 _state.value = _state.value.copy(
                     traktCode = null,
-                    error = result.exceptionOrNull()?.message ?: "Trakt authentication failed"
+                    error = result.exceptionOrNull()?.message ?: "Trakt authentication failed",
                 )
                 logger.w { "Trakt polling failed: ${result.exceptionOrNull()?.message}" }
             }
@@ -85,7 +85,7 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
             } else {
                 _state.value = _state.value.copy(
                     debridCode = null,
-                    error = result.exceptionOrNull()?.message ?: "Real-Debrid authentication failed"
+                    error = result.exceptionOrNull()?.message ?: "Real-Debrid authentication failed",
                 )
                 logger.w { "Debrid polling failed: ${result.exceptionOrNull()?.message}" }
             }

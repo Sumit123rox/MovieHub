@@ -29,11 +29,11 @@ fun Modifier.shimmerEffect(): Modifier {
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = 1200,
-                easing = FastOutSlowInEasing
+                easing = FastOutSlowInEasing,
             ),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = RepeatMode.Reverse,
         ),
-        label = "shimmerTranslation"
+        label = "shimmerTranslation",
     )
 
     val base = MaterialTheme.colorScheme.onSurface
@@ -42,10 +42,10 @@ fun Modifier.shimmerEffect(): Modifier {
             colors = listOf(
                 base.copy(alpha = 0.06f),
                 base.copy(alpha = 0.12f),
-                base.copy(alpha = 0.06f)
+                base.copy(alpha = 0.06f),
             ),
             start = Offset.Zero,
-            end = Offset(x = translateAnim, y = translateAnim)
+            end = Offset(x = translateAnim, y = translateAnim),
         )
     }
 

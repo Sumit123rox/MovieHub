@@ -2,14 +2,14 @@ package com.moviehub.feature.home.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,13 +26,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaItemStore
+import com.moviehub.core.ui.components.EmptyState
 import com.moviehub.core.ui.components.Poster
+import com.moviehub.core.ui.components.TechnicalBadge
 import com.moviehub.core.ui.components.VerticalGrid
 import com.moviehub.core.ui.components.shimmerEffect
+import com.moviehub.core.ui.theme.MovieHubDimens
 import moviehub.core.ui.generated.resources.Res
 import moviehub.core.ui.generated.resources.back
 import moviehub.core.ui.generated.resources.no_items_found
 import org.jetbrains.compose.resources.stringResource
+import org.koin.compose.koinInject
+import com.moviehub.core.network.AddonManager
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,9 +49,11 @@ fun CatalogScreen(
     addonId: String?,
     onMediaClick: (id: String, type: String, addonUrl: String?) -> Unit,
     onBackClick: () -> Unit,
-    viewModel: CatalogViewModel = koinViewModel()
+    viewModel: CatalogViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val addonManager: AddonManager = koinInject()
+    val installedAddons by addonManager.installedAddons.collectAsState()
 
     LaunchedEffect(type, catalogId, addonId) {
         viewModel.loadCatalog(type, catalogId, addonId)
@@ -60,88 +67,93 @@ fun CatalogScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(Res.string.back)
+                            contentDescription = stringResource(Res.string.back),
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                ),
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues).background(MaterialTheme.colorScheme.background)) {
             when {
                 state.isLoading -> {
                     VerticalGrid(
                         items = List(9) { "" },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     ) { _, _ ->
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(0.67f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .shimmerEffect()
+                                .shimmerEffect(),
                         )
                     }
                 }
                 state.error != null && state.displayedItems.isEmpty() -> {
-                    Column(
+                    EmptyState(
+                        icon = Icons.Default.Search,
+                        title = stringResource(Res.string.no_items_found),
+                        subtitle = state.error,
                         modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(Res.string.no_items_found),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                        state.error?.let { errorMsg ->
-                            Text(
-                                text = errorMsg,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                        }
-                    }
+                    )
                 }
                 state.displayedItems.isNotEmpty() -> {
                     VerticalGrid(
                         items = state.displayedItems,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     ) { index, movie ->
                         if (index >= state.displayedItems.size - 4 && !state.isPaginating && state.canPaginate) {
                             viewModel.loadMore(type, catalogId, addonId)
                         }
 
-                        Poster(
-                            url = movie.posterUrl,
-                            contentDescription = movie.title,
-                            isWatched = movie.id in state.watchedMediaIds,
-                            onClick = {
-                                MediaItemStore.put(movie.id, movie)
-                                onMediaClick(movie.id, movie.type.stremioType, movie.sourceAddonUrl)
+                        val providerName = remember(movie.sourceAddonId, installedAddons) {
+                            installedAddons.find { it.id == movie.sourceAddonId }?.name ?: movie.sourceAddonId
+                        }
+
+                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(MovieHubDimens.Poster.aspectRatio)) {
+                            Poster(
+                                url = movie.posterUrl,
+                                contentDescription = movie.title,
+                                isWatched = movie.id in state.watchedMediaIds,
+                                onClick = {
+                                    MediaItemStore.put(movie.id, movie)
+                                    onMediaClick(movie.id, movie.type.stremioType, movie.sourceAddonUrl)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+
+                            if (!providerName.isNullOrBlank() && (addonId == "multi_addons" || addonId == null)) {
+                                TechnicalBadge(
+                                    text = providerName,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(8.dp)
+                                )
                             }
-                        )
+                        }
                     }
 
                     if (state.isPaginating) {
                         Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(16.dp)) {
                             CircularProgressIndicator(
                                 modifier = Modifier.align(Alignment.Center),
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
                 }
                 else -> {
-                    Text(
-                        text = stringResource(Res.string.no_items_found),
+                    EmptyState(
+                        icon = Icons.Default.Search,
+                        title = stringResource(Res.string.no_items_found),
                         modifier = Modifier.align(Alignment.Center),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 }
             }

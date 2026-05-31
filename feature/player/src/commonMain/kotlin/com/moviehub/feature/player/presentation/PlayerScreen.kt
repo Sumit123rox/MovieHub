@@ -6,8 +6,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,10 +24,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -31,7 +37,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,7 +50,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.UserPreferencesDao
 import com.moviehub.core.database.WatchHistoryDao
@@ -59,10 +66,17 @@ import com.moviehub.core.ui.theme.MovieHubDimens
 import com.moviehub.feature.player.presentation.components.PlayerControls
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 
 @Composable
@@ -91,6 +105,8 @@ sealed interface PlayerAction {
     /** @param groupIndex TrackGroup index, -1 = disable subtitles */
     data class SelectSubtitleTrack(val groupIndex: Int, val trackIndex: Int) : PlayerAction
 
+    data class SelectVideoTrack(val groupIndex: Int, val trackIndex: Int) : PlayerAction
+
     data object Play : PlayerAction
 
     data object Pause : PlayerAction
@@ -117,9 +133,27 @@ fun PlayerScreen(
     onPreviousEpisode: (() -> Unit)? = null,
 ) {
     var activeStream by remember { mutableStateOf(stream) }
+    var activeMediaId by remember { mutableStateOf(mediaId) }
+    var activeTitle by remember { mutableStateOf(title) }
+
+    LaunchedEffect(mediaId) {
+        activeMediaId = mediaId
+    }
+    LaunchedEffect(title) {
+        activeTitle = title
+    }
+
     var playbackState by remember { mutableStateOf(PlayerPlaybackState()) }
     var requestedAction by remember { mutableStateOf<PlayerAction?>(null) }
     var isActionPending by remember { mutableStateOf(false) }
+    var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(optimisticIsPlaying) {
+        if (optimisticIsPlaying != null) {
+            kotlinx.coroutines.delay(1500)
+            optimisticIsPlaying = null
+        }
+    }
 
     val playerController: MoviePlayerController = koinInject()
 
@@ -137,6 +171,7 @@ fun PlayerScreen(
                     }
                     if (flatIndex != -1) playerController.selectAudioTrack(flatIndex)
                 }
+
                 is PlayerAction.SelectSubtitleTrack -> {
                     if (action.groupIndex == -1) {
                         playerController.selectSubtitleTrack(-1)
@@ -147,22 +182,35 @@ fun PlayerScreen(
                         if (flatIndex != -1) playerController.selectSubtitleTrack(flatIndex)
                     }
                 }
+
+                is PlayerAction.SelectVideoTrack -> {
+                    val flatIndex = playbackState.videoTracks.indexOfFirst {
+                        it.index == action.groupIndex && it.id == action.trackIndex.toString()
+                    }
+                    if (flatIndex != -1) playerController.selectVideoTrack(flatIndex)
+                }
+
                 is PlayerAction.SetScale -> playerController.setVideoScale(action.scale)
                 is PlayerAction.ResetZoom -> playerController.setVideoScale(VideoScale.FIT)
-                else -> { /* no-op */ }
+                is PlayerAction.EnterPip -> playerController.enterPip()
+                else -> { // no-op
+                }
             }
             requestedAction = null
         }
     }
+    val isInPip = rememberIsInPipMode()
     var lastSeekTime by remember { mutableStateOf(0L) }
     var isControlsVisible by remember { mutableStateOf(true) }
     var isScreenLocked by remember { mutableStateOf(false) }
     val blurRadius by animateDpAsState(
-        targetValue = if (isControlsVisible && !isScreenLocked && !isIosPlatform) 12.dp else 0.dp,
+        targetValue = if (isControlsVisible && !isScreenLocked && !isIosPlatform && !isInPip) MovieHubDimens.Player.controlsBlurRadius else MovieHubDimens.Spacing.dp0,
         animationSpec = tween(durationMillis = 300),
     )
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
     var showLoading by remember { mutableStateOf(true) }
+    var isChangingAudioTrack by remember { mutableStateOf(false) }
+    var isChangingVideoTrack by remember { mutableStateOf(false) }
     var hasSavedHistory by remember { mutableStateOf(false) }
     var hasStartedPlaying by remember { mutableStateOf(false) }
     var hasResumed by remember { mutableStateOf(false) }
@@ -180,11 +228,19 @@ fun PlayerScreen(
     var freeZoomScale by remember { mutableStateOf(1f) }
     var freeZoomOffset by remember { mutableStateOf(Offset.Zero) }
     var showDebugOverlay by remember { mutableStateOf(false) }
-    var pendingStreamSwitchPosition by remember { mutableStateOf(-1L) }
+    var pendingSeekPosition by remember { mutableStateOf(-1L) }
     var isSettingsSheetOpen by remember { mutableStateOf(false) }
     var sleepTimerRemainingMs by remember { mutableStateOf<Long?>(null) }
     var subtitleStyle by remember { mutableStateOf(SubtitleStyle()) }
+    val posterResource = if (posterUrl != null) asyncPainterResource(data = posterUrl) else null
     var hasTriggeredAutoPlay by remember { mutableStateOf(false) }
+    var retryTrigger by remember { mutableStateOf(0) }
+
+    LaunchedEffect(isInPip) {
+        if (isInPip) {
+            isControlsVisible = false
+        }
+    }
 
     val clipboardManager = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
@@ -193,6 +249,53 @@ fun PlayerScreen(
     val profileRepository: ProfileRepository = koinInject()
     val userPreferencesDao: UserPreferencesDao = koinInject()
     val torrentResolver: com.moviehub.core.network.torrent.HybridStreamResolver = koinInject()
+    val playbackPrefsRepository: com.moviehub.core.database.PlaybackPreferencesRepository = koinInject()
+    val addonManager: com.moviehub.core.network.AddonManager = koinInject()
+    val stremioApiClient: com.moviehub.core.network.StremioApiClient = koinInject()
+    val scope = rememberCoroutineScope()
+
+    val playbackPreferences by playbackPrefsRepository.getPreferencesFlow().collectAsState(com.moviehub.core.database.PlaybackPreferences())
+
+    var showAutoPlayCountdown by remember { mutableStateOf(false) }
+    var autoPlayCountdownSeconds by remember { mutableIntStateOf(10) }
+    var nextEpisodeStream by remember { mutableStateOf<StreamItem?>(null) }
+    var nextEpisodeTitle by remember { mutableStateOf<String?>(null) }
+    var isPreFetchingNextStream by remember { mutableStateOf(false) }
+    var nextEpisodeId by remember { mutableStateOf<String?>(null) }
+    var hasTriggeredBingeCountdown by remember { mutableStateOf(false) }
+
+    val triggerPlayNext: () -> Unit = {
+        showAutoPlayCountdown = false
+        val resolvedStream = nextEpisodeStream
+        if (resolvedStream != null) {
+            val parts = activeMediaId!!.split(":")
+            val seriesId = parts[0]
+            val season = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val episode = parts.getOrNull(2)?.toIntOrNull() ?: 1
+
+            pendingSeekPosition = 0L
+            hasStartedPlaying = false
+            showLoading = true
+            hasSavedHistory = false
+            optimisticIsPlaying = null
+            playbackState = playbackState.copy(
+                isPlaying = false,
+                isLoading = true,
+                currentPositionMs = 0L,
+                durationMs = 0L,
+                bufferedPositionMs = 0L,
+                error = null,
+            )
+            activeStream = resolvedStream
+            activeMediaId = nextEpisodeId
+            activeTitle = "Season $season Episode ${episode + 1}"
+
+            // Reset binge conditions for next loop
+            nextEpisodeStream = null
+            nextEpisodeId = null
+            hasTriggeredBingeCountdown = false
+        }
+    }
 
     var seekIncrement by remember { mutableStateOf(10) }
     var seekIndicatorText by remember { mutableStateOf<String?>(null) }
@@ -212,9 +315,11 @@ fun PlayerScreen(
                 is com.moviehub.core.network.torrent.ResolveResult.Direct -> {
                     if (result.stream.url != activeStream.url) activeStream = result.stream
                 }
+
                 is com.moviehub.core.network.torrent.ResolveResult.P2p -> {
                     activeStream = result.stream
                 }
+
                 is com.moviehub.core.network.torrent.ResolveResult.Unavailable -> {
                     // Leave active stream as-is — player error state will show
                 }
@@ -257,6 +362,9 @@ fun PlayerScreen(
     // sends a partial update (e.g. Android polling loop without track/error data)
     val onStateChanged: (PlayerPlaybackState) -> Unit = remember {
         { update ->
+            if (optimisticIsPlaying == update.isPlaying) {
+                optimisticIsPlaying = null
+            }
             playbackState = playbackState.copy(
                 isPlaying = update.isPlaying,
                 isLoading = update.isLoading,
@@ -265,8 +373,8 @@ fun PlayerScreen(
                 durationMs = update.durationMs,
                 bufferedPositionMs = update.bufferedPositionMs,
                 playbackSpeed = update.playbackSpeed,
-                selectedAudioTrackIndex = update.selectedAudioTrackIndex,
-                selectedSubtitleTrackIndex = update.selectedSubtitleTrackIndex,
+                selectedAudioTrackIndex = if (update.audioTracks.isNotEmpty()) update.selectedAudioTrackIndex else playbackState.selectedAudioTrackIndex,
+                selectedSubtitleTrackIndex = if (update.subtitleTracks.isNotEmpty()) update.selectedSubtitleTrackIndex else playbackState.selectedSubtitleTrackIndex,
                 audioTracks = if (update.audioTracks.isNotEmpty()) update.audioTracks else playbackState.audioTracks,
                 subtitleTracks = if (update.subtitleTracks.isNotEmpty()) update.subtitleTracks else playbackState.subtitleTracks,
                 videoTracks = if (update.videoTracks.isNotEmpty()) update.videoTracks else playbackState.videoTracks,
@@ -281,6 +389,43 @@ fun PlayerScreen(
         }
     }
 
+    val saveProgressImmediate: (Long) -> Unit = remember(
+        playbackState.durationMs,
+        activeMediaId,
+        currentAudioGroupIndex,
+        currentAudioTrackIndex,
+        currentSubtitleGroupIndex,
+        currentSubtitleTrackIndex,
+    ) {
+        { positionMs ->
+            if (positionMs > 0 && playbackState.durationMs > 0) {
+                scope.launch {
+                    try {
+                        val pId = profileRepository.activeProfile.value?.id
+                        val vId = activeMediaId
+                        if (pId != null && vId != null) {
+                            watchProgressDao.insertOrUpdate(
+                                WatchProgress(
+                                    mediaId = vId,
+                                    profileId = pId,
+                                    type = mediaType ?: "movie",
+                                    progressMs = positionMs,
+                                    durationMs = playbackState.durationMs,
+                                    audioGroupIndex = currentAudioGroupIndex,
+                                    audioTrackIndex = currentAudioTrackIndex,
+                                    subtitleGroupIndex = currentSubtitleGroupIndex,
+                                    subtitleTrackIndex = currentSubtitleTrackIndex,
+                                ),
+                            )
+                        }
+                    } catch (_: Exception) {
+                        // DB may be closed during activity teardown — best-effort save
+                    }
+                }
+            }
+        }
+    }
+
     // Smart status bar — dark icons for player's black background
     SmartStatusBar(isDark = true, color = Color.Black)
 
@@ -292,23 +437,30 @@ fun PlayerScreen(
         onDispose { unlockOrientation() }
     }
 
-    // Load seek increment from user preferences
-    LaunchedEffect(mediaId) {
+    // Load seek increment and subtitle style from user preferences
+    LaunchedEffect(activeMediaId) {
         val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
         val prefs = userPreferencesDao.getPreference(profileId)
         seekIncrement = prefs?.seekIncrement ?: 10
+        if (prefs != null && prefs.subtitleStyleJson.isNotBlank()) {
+            try {
+                val loadedStyle = Json.decodeFromString<SubtitleStyle>(prefs.subtitleStyleJson)
+                subtitleStyle = loadedStyle
+            } catch (_: Exception) {
+                // Keep default if decode fails
+            }
+        }
     }
 
     // Auto-resume to last saved position and track preferences on load
-    LaunchedEffect(mediaId) {
+    LaunchedEffect(activeMediaId) {
         val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-        val videoId = mediaId ?: return@LaunchedEffect
+        val videoId = activeMediaId ?: return@LaunchedEffect
         val progress = watchProgressDao.getProgress(videoId, profileId).firstOrNull()
         if (progress != null && !progress.isWatched) {
             // Restore playback position (if > 5 seconds)
             if (progress.progressMs > 5_000) {
-                delay(2000) // Wait for mpv to fully initialize before seeking
-                requestedAction = PlayerAction.SeekTo(progress.progressMs)
+                pendingSeekPosition = progress.progressMs
                 hasResumed = true
             }
             // Restore audio track preference (best-effort)
@@ -328,18 +480,13 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-resume position after switching stream source
-    LaunchedEffect(streamUrl) {
-        val savedPos = pendingStreamSwitchPosition
-        if (savedPos > 0) {
-            // Wait for new stream to start playing before seeking
-            val pollDelays = listOf(500L, 500L, 1000L, 1000L)
-            for (waitMs in pollDelays) {
-                delay(waitMs)
-                if (playbackState.isPlaying) break
-            }
-            requestedAction = PlayerAction.SeekTo(savedPos)
-            pendingStreamSwitchPosition = -1
+    // Modern, reactive, and bulletproof progress restoration trigger
+    // Seeks EXACTLY when the media duration is resolved (meaning Media3 has successfully loaded/prepared the stream)
+    LaunchedEffect(playbackState.durationMs, playbackState.isPlaying) {
+        val seekPos = pendingSeekPosition
+        if (seekPos > 0 && playbackState.durationMs > 0 && (playbackState.isPlaying || hasStartedPlaying)) {
+            requestedAction = PlayerAction.SeekTo(seekPos)
+            pendingSeekPosition = -1L // Consume seek token
         }
     }
 
@@ -349,11 +496,11 @@ fun PlayerScreen(
             hasSavedHistory = true
             hasStartedPlaying = true
             val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-            val videoId = mediaId ?: return@LaunchedEffect
+            val videoId = activeMediaId ?: return@LaunchedEffect
             watchHistoryDao.conditionalUpsertWatchHistory(
                 mediaId = videoId,
                 profileId = profileId,
-                title = title,
+                title = activeTitle,
                 type = mediaType ?: "movie",
                 posterPath = posterUrl,
             )
@@ -375,7 +522,7 @@ fun PlayerScreen(
             ) {
                 try {
                     val profileId = profileRepository.activeProfile.value?.id ?: continue
-                    val videoId = mediaId ?: continue
+                    val videoId = activeMediaId ?: continue
                     watchProgressDao.insertOrUpdate(
                         WatchProgress(
                             mediaId = videoId,
@@ -401,10 +548,10 @@ fun PlayerScreen(
     DisposableEffect(Unit) {
         onDispose {
             if (hasStartedPlaying && playbackState.currentPositionMs > 0 && playbackState.durationMs > 0 && playbackState.currentPositionMs < playbackState.durationMs) {
-                periodicSaveScope.launch {
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                     try {
                         val profileId = profileRepository.activeProfile.value?.id ?: return@launch
-                        val videoId = mediaId ?: return@launch
+                        val videoId = activeMediaId ?: return@launch
                         watchProgressDao.insertOrUpdate(
                             WatchProgress(
                                 mediaId = videoId,
@@ -434,7 +581,7 @@ fun PlayerScreen(
         if (reachedEnd) {
             try {
                 val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-                val videoId = mediaId ?: return@LaunchedEffect
+                val videoId = activeMediaId ?: return@LaunchedEffect
                 watchProgressDao.insertOrUpdate(
                     WatchProgress(
                         mediaId = videoId,
@@ -460,7 +607,7 @@ fun PlayerScreen(
         if (!playbackState.isPlaying && hasStartedPlaying && playbackState.currentPositionMs > 0) {
             try {
                 val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
-                val videoId = mediaId ?: return@LaunchedEffect
+                val videoId = activeMediaId ?: return@LaunchedEffect
                 watchProgressDao.insertOrUpdate(
                     WatchProgress(
                         mediaId = videoId,
@@ -513,6 +660,7 @@ fun PlayerScreen(
                 requestedAction = PlayerAction.Pause
                 sleepTimerRemainingMs = null
             }
+
             else -> {
                 delay(1000)
                 sleepTimerRemainingMs = remaining - 1000
@@ -520,18 +668,124 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-play next episode when near end
-    LaunchedEffect(onNextEpisode != null) {
-        if (onNextEpisode == null) return@LaunchedEffect
-        hasTriggeredAutoPlay = false
+    // Determine if we are playing a series episode
+    val isSeriesEpisode = remember(mediaType, activeMediaId) {
+        mediaType == "series" && activeMediaId != null && activeMediaId!!.contains(":")
+    }
+
+    // Dynamic next episode preloading and stream resolution
+    LaunchedEffect(isSeriesEpisode, playbackState.currentPositionMs, playbackState.durationMs) {
+        if (!isSeriesEpisode || playbackState.durationMs <= 0) return@LaunchedEffect
+
+        // Trigger pre-fetching 30 seconds before completion
+        val remainingMs = playbackState.durationMs - playbackState.currentPositionMs
+        if (remainingMs in 1000L..30000L && nextEpisodeStream == null && !isPreFetchingNextStream) {
+            isPreFetchingNextStream = true
+            val parts = activeMediaId!!.split(":")
+            val seriesId = parts[0]
+            val season = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val episode = parts.getOrNull(2)?.toIntOrNull() ?: 1
+            val nextEpId = "$seriesId:$season:${episode + 1}"
+            nextEpisodeId = nextEpId
+            nextEpisodeTitle = "Season $season Episode ${episode + 1}"
+
+            scope.launch {
+                val streamAddons = addonManager.getAddonsProviding("stream", "series")
+
+                // Fetch streams from all addons parallelly
+                val fetchedStreams = mutableListOf<StreamItem>()
+                streamAddons.map { (url, manifest) ->
+                    async {
+                        try {
+                            stremioApiClient.getStreams(
+                                baseUrl = url,
+                                type = "series",
+                                id = nextEpId,
+                                addonName = manifest.name,
+                                addonId = manifest.id,
+                            )
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                    }
+                }.forEach { deferred ->
+                    fetchedStreams.addAll(deferred.await())
+                }
+
+                if (fetchedStreams.isNotEmpty()) {
+                    val bestStream = fetchedStreams.maxByOrNull { it.playbackPriority }
+                    if (bestStream != null) {
+                        // If it's torrent/magnet, resolve Debrid links in advance!
+                        val resolved = if (bestStream.isTorrentStream && bestStream.infoHash != null) {
+                            val res = torrentResolver.resolve(bestStream)
+                            when (res) {
+                                is com.moviehub.core.network.torrent.ResolveResult.Direct -> res.stream
+                                is com.moviehub.core.network.torrent.ResolveResult.P2p -> res.stream
+                                else -> bestStream
+                            }
+                        } else {
+                            bestStream
+                        }
+
+                        nextEpisodeStream = resolved
+
+                        // Warm up TLS/TCP connection!
+                        try {
+                            val urlToWarm = resolved.url ?: resolved.externalUrl
+                            if (!urlToWarm.isNullOrBlank()) {
+                                withContext(Dispatchers.IO) {
+                                    val headRequest = okhttp3.Request.Builder()
+                                        .url(urlToWarm)
+                                        .head()
+                                        .build()
+                                    // Make a simple client to ping head
+                                    okhttp3.OkHttpClient().newCall(headRequest).execute().close()
+                                }
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                isPreFetchingNextStream = false
+            }
+        }
+    }
+
+    // Triggers binge-watching countdown 10 seconds before completion
+    LaunchedEffect(isSeriesEpisode, playbackState.currentPositionMs, playbackState.durationMs) {
+        if (!isSeriesEpisode || playbackState.durationMs <= 0 || !playbackPreferences.autoPlayNext) return@LaunchedEffect
+
+        val remainingMs = playbackState.durationMs - playbackState.currentPositionMs
+        if (remainingMs in 1000L..12000L && nextEpisodeStream != null && !showAutoPlayCountdown && !hasTriggeredBingeCountdown) {
+            hasTriggeredBingeCountdown = true
+            showAutoPlayCountdown = true
+            autoPlayCountdownSeconds = 10
+        }
+    }
+
+    // Handles the countdown timer tick
+    LaunchedEffect(showAutoPlayCountdown) {
+        if (showAutoPlayCountdown) {
+            while (autoPlayCountdownSeconds > 0 && showAutoPlayCountdown) {
+                delay(1000)
+                autoPlayCountdownSeconds--
+            }
+            if (autoPlayCountdownSeconds == 0 && showAutoPlayCountdown) {
+                triggerPlayNext()
+            }
+        }
+    }
+
+    // Auto-exit player when movie playback completes (for movies only, not series)
+    LaunchedEffect(mediaType, isSeriesEpisode) {
+        if (mediaType != "movie" || isSeriesEpisode) return@LaunchedEffect
         while (isActive) {
             delay(1000)
-            if (!hasTriggeredAutoPlay && playbackState.durationMs > 0 &&
+            if (playbackState.durationMs > 0 &&
                 playbackState.currentPositionMs >= playbackState.durationMs * 0.95
             ) {
-                hasTriggeredAutoPlay = true
-                delay(1500)
-                onNextEpisode?.invoke()
+                delay(2000) // Small grace period before auto-exit
+                onBackClick()
                 break
             }
         }
@@ -546,29 +800,45 @@ fun PlayerScreen(
         }
     }
 
-    // Immediately hide loading overlay when playback actually starts
-    LaunchedEffect(playbackState.isPlaying) {
-        if (playbackState.isPlaying) {
-            val recentSeek = (playerTimeMillis() - lastSeekTimeMs) < 2000
-            if (recentSeek) {
-                showLoading = false // No delay for post-seek resume
-            } else {
-                delay(100)
-                showLoading = false
+    // Unified robust reactive playback loading overlay dismissal manager
+    val isPlayerReady = !playbackState.isLoading && playbackState.durationMs > 0
+    val shouldDismissLoader = playbackState.isPlaying || isPlayerReady
+
+    LaunchedEffect(playbackState.isPlaying, playbackState.isLoading, playbackState.durationMs, shouldDismissLoader) {
+        if (shouldDismissLoader) {
+            showLoading = false
+            hasStartedPlaying = true
+        } else if (playbackState.isLoading) {
+            if (hasStartedPlaying) {
+                delay(250) // Brief debounce for mid-playback buffering to avoid microscopic blinks
             }
+            showLoading = true
         }
     }
 
-    // Loading state: show during initial load AND during post-seek rebuffering.
-    // Only dismiss loading when playback has actually started or an error occurred.
-    // Prevents the initial isLoading=false from immediately hiding the overlay.
-    LaunchedEffect(playbackState.isLoading) {
-        val recentSeek = (playerTimeMillis() - lastSeekTimeMs) < 2000
-        if (playbackState.isLoading && (!hasStartedPlaying || recentSeek)) {
-            if (hasStartedPlaying) delay(400) // Debounce for seek rebuffer only
-            showLoading = true
-        } else if (hasStartedPlaying || playbackState.error != null) {
-            showLoading = false
+    // Dismiss audio track change loading indicator when selection completes
+    LaunchedEffect(playbackState.selectedAudioTrackIndex) {
+        isChangingAudioTrack = false
+    }
+
+    // Safety timeout for audio track switching loader (max 2 seconds)
+    LaunchedEffect(isChangingAudioTrack) {
+        if (isChangingAudioTrack) {
+            delay(2000)
+            isChangingAudioTrack = false
+        }
+    }
+
+    // Dismiss video track change loading indicator when selection completes
+    LaunchedEffect(playbackState.videoWidth, playbackState.videoHeight) {
+        isChangingVideoTrack = false
+    }
+
+    // Safety timeout for video track switching loader (max 2 seconds)
+    LaunchedEffect(isChangingVideoTrack) {
+        if (isChangingVideoTrack) {
+            delay(2000)
+            isChangingVideoTrack = false
         }
     }
 
@@ -600,18 +870,20 @@ fun PlayerScreen(
                     )
                     .blur(blurRadius),
             ) {
-                VideoPlayer(
-                    url = streamUrl,
-                    headers = headers,
-                    onPlaybackStateChanged = onStateChanged,
-                    brightness = brightness,
-                    videoScale = videoScale,
-                    subtitleBottomMargin = if (isControlsVisible) 110 else 0,
-                    subtitleStyle = subtitleStyle,
-                    drmLicenseUrl = activeStream.drmLicenseUrl,
-                    drmScheme = activeStream.drmScheme,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                key(retryTrigger) {
+                    VideoPlayer(
+                        url = streamUrl,
+                        headers = headers,
+                        onPlaybackStateChanged = onStateChanged,
+                        brightness = brightness,
+                        videoScale = videoScale,
+                        subtitleBottomMargin = if (isControlsVisible) 110 else 0,
+                        subtitleStyle = subtitleStyle,
+                        drmLicenseUrl = activeStream.drmLicenseUrl,
+                        drmScheme = activeStream.drmScheme,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
 
             // Loading bar at top (only during initial load, not during playback streaming)
@@ -716,6 +988,7 @@ fun PlayerScreen(
                                                 brightness = (raw - dragAmount / sens).coerceIn(0f, 1f)
                                                 transientBrightness = brightness
                                             }
+
                                             x > w * 0.75f -> {
                                                 val raw = if (volume < 0f) 1f else volume
                                                 volume = (raw - dragAmount / sens).coerceIn(0f, 1f)
@@ -808,18 +1081,19 @@ fun PlayerScreen(
             }
 
             PlayerControls(
-                isVisible = isControlsVisible && !isScreenLocked,
-                isPlaying = playbackState.isPlaying,
-                title = title,
+                isVisible = isControlsVisible && !isScreenLocked && !isInPip,
+                isPlaying = optimisticIsPlaying ?: playbackState.isPlaying,
+                title = activeTitle,
                 seekIncrement = seekIncrement,
                 onSeekIndicatorChange = { seekIndicatorText = it },
                 onPlayPauseToggle = {
-                    // Debounce: ignore rapid taps within 500ms to prevent
-                    // queuing multiple play/pause commands on mpvQueue
                     val now = playerTimeMillis()
                     if (now - lastSeekTime < 500) return@PlayerControls
                     lastSeekTime = now
-                    requestedAction = if (playbackState.isPlaying) PlayerAction.Pause else PlayerAction.Play
+                    val currentPlaying = optimisticIsPlaying ?: playbackState.isPlaying
+                    val nextPlaying = !currentPlaying
+                    optimisticIsPlaying = nextPlaying
+                    requestedAction = if (nextPlaying) PlayerAction.Play else PlayerAction.Pause
                     interactionTick++
                 },
                 onBackClick = onBackClick,
@@ -839,12 +1113,13 @@ fun PlayerScreen(
                 currentTime = playbackState.currentPositionMs,
                 onSpeedChange = { requestedAction = PlayerAction.SetSpeed(it) },
                 onAudioTrackChange = { groupIndex, trackIndex ->
+                    isChangingAudioTrack = true
                     requestedAction = PlayerAction.SelectAudioTrack(groupIndex, trackIndex)
                     currentAudioGroupIndex = groupIndex
                     currentAudioTrackIndex = trackIndex
                     periodicSaveScope.launch {
                         val pId = profileRepository.activeProfile.value?.id ?: return@launch
-                        val vId = mediaId ?: return@launch
+                        val vId = activeMediaId ?: return@launch
                         watchProgressDao.insertOrUpdate(
                             WatchProgress(
                                 mediaId = vId,
@@ -866,7 +1141,7 @@ fun PlayerScreen(
                     currentSubtitleTrackIndex = trackIndex
                     periodicSaveScope.launch {
                         val pId = profileRepository.activeProfile.value?.id ?: return@launch
-                        val vId = mediaId ?: return@launch
+                        val vId = activeMediaId ?: return@launch
                         watchProgressDao.insertOrUpdate(
                             WatchProgress(
                                 mediaId = vId,
@@ -904,7 +1179,8 @@ fun PlayerScreen(
                 onVideoTrackChange = { index ->
                     val track = playbackState.videoTracks.getOrNull(index)
                     if (track != null) {
-                        requestedAction = PlayerAction.SetScale(VideoScale.FIT)
+                        isChangingVideoTrack = true
+                        requestedAction = PlayerAction.SelectVideoTrack(track.index, track.id.toIntOrNull() ?: 0)
                     }
                 },
                 subtitleTracks = playbackState.subtitleTracks,
@@ -912,7 +1188,21 @@ fun PlayerScreen(
                 currentStream = activeStream,
                 streams = sortedStreams,
                 onStreamChange = { newStream ->
-                    pendingStreamSwitchPosition = playbackState.currentPositionMs
+                    val pos = playbackState.currentPositionMs
+                    saveProgressImmediate(pos)
+                    pendingSeekPosition = pos
+                    hasStartedPlaying = false
+                    showLoading = true
+                    hasSavedHistory = false
+                    optimisticIsPlaying = null
+                    playbackState = playbackState.copy(
+                        isPlaying = false,
+                        isLoading = true,
+                        currentPositionMs = 0L,
+                        durationMs = 0L,
+                        bufferedPositionMs = 0L,
+                        error = null,
+                    )
                     activeStream = newStream
                 },
                 currentVolume = volume,
@@ -930,7 +1220,15 @@ fun PlayerScreen(
                 sleepTimerRemainingMs = sleepTimerRemainingMs,
                 onSleepTimerSet = { sleepTimerRemainingMs = it },
                 subtitleStyle = subtitleStyle,
-                onSubtitleStyleChange = { subtitleStyle = it },
+                onSubtitleStyleChange = { newStyle ->
+                    subtitleStyle = newStyle
+                    scope.launch {
+                        val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                        val currentPrefs = userPreferencesDao.getPreference(profileId) ?: com.moviehub.core.database.UserPreferencesEntity(profileId)
+                        val styleJson = Json.encodeToString(newStyle)
+                        userPreferencesDao.setPreference(currentPrefs.copy(subtitleStyleJson = styleJson))
+                    }
+                },
                 videoResolution = videoResolutionLabel,
                 videoCodec = playbackState.videoCodec,
                 videoBitrate = playbackState.videoBitrate,
@@ -938,6 +1236,43 @@ fun PlayerScreen(
                 chapters = playbackState.chapters,
                 showDebugOverlay = showDebugOverlay,
                 onToggleDebug = { showDebugOverlay = !showDebugOverlay },
+                preferredResolution = playbackPreferences.preferredResolution,
+                onResolutionChange = { selectedRes ->
+                    scope.launch {
+                        playbackPrefsRepository.updatePreferences(
+                            playbackPreferences.copy(preferredResolution = selectedRes),
+                        )
+                        // Trigger resolution/quality stream switch!
+                        val matchingStream = streams.find { stream ->
+                            val nameLc = stream.name?.lowercase() ?: ""
+                            when (selectedRes) {
+                                "4K" -> nameLc.contains("4k") || nameLc.contains("2160")
+                                "1080p" -> nameLc.contains("1080") || nameLc.contains("fhd")
+                                "720p" -> nameLc.contains("720") || nameLc.contains("hd")
+                                "SD" -> nameLc.contains("480") || nameLc.contains("sd")
+                                else -> false
+                            }
+                        }
+                        if (matchingStream != null && matchingStream.url != activeStream.url) {
+                            val pos = playbackState.currentPositionMs
+                            saveProgressImmediate(pos)
+                            pendingSeekPosition = pos
+                            hasStartedPlaying = false
+                            showLoading = true
+                            hasSavedHistory = false
+                            optimisticIsPlaying = null
+                            playbackState = playbackState.copy(
+                                isPlaying = false,
+                                isLoading = true,
+                                currentPositionMs = 0L,
+                                durationMs = 0L,
+                                bufferedPositionMs = 0L,
+                                error = null,
+                            )
+                            activeStream = matchingStream
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxSize(),
             )
 
@@ -977,6 +1312,8 @@ fun PlayerScreen(
 
             // Premium Error Overlay (only for actual errors)
             if (playbackState.error != null) {
+                var showTechDetails by remember { mutableStateOf(false) }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -989,108 +1326,215 @@ fun PlayerScreen(
                 ) {
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF161616),
+                            containerColor = Color(0xFF161426), // Premium, theme-matching deep purple-gray
                             contentColor = Color.White,
                         ),
                         shape = RoundedCornerShape(MovieHubDimens.Spacing.xxl),
+                        border = BorderStroke(
+                            width = MovieHubDimens.Spacing.dp1,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                                ),
+                            ),
+                        ),
                         modifier = Modifier
                             .width(MovieHubDimens.Player.overlaySheetMaxWidth)
                             .padding(MovieHubDimens.Spacing.xxl),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(MovieHubDimens.Spacing.xxl),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
-                        ) {
-                            Box(
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            IconButton(
+                                onClick = onBackClick,
                                 modifier = Modifier
-                                    .size(MovieHubDimens.Icon.xxxl)
-                                    .background(
-                                        Color.Red.copy(alpha = 0.15f),
-                                        CircleShape,
-                                    ),
-                                contentAlignment = Alignment.Center,
+                                    .align(Alignment.TopEnd)
+                                    .padding(MovieHubDimens.Spacing.sm),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = "Playback Failed",
-                                    tint = Color.Red,
-                                    modifier = Modifier.size(MovieHubDimens.Icon.xl),
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close Player",
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(MovieHubDimens.Spacing.lg),
                                 )
                             }
 
-                            Text(
-                                text = "Playback Failed",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                textAlign = TextAlign.Center,
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .padding(horizontal = MovieHubDimens.Spacing.xxl, vertical = MovieHubDimens.Spacing.xl)
+                                    .verticalScroll(rememberScrollState()),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(MovieHubDimens.Icon.xxxl)
+                                        .background(
+                                            Color.Red.copy(alpha = 0.15f),
+                                            CircleShape,
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Playback Failed",
+                                        tint = Color.Red,
+                                        modifier = Modifier.size(MovieHubDimens.Icon.xl),
+                                    )
+                                }
 
-                            Text(
-                                text = "An error occurred: ${playbackState.error}. You can try playing this stream in an external player, copy the direct link, or choose another source.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center,
-                            )
-
-                            if (!feedbackMessage.isNullOrBlank()) {
                                 Text(
-                                    text = feedbackMessage!!,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MovieHubColors.Success,
-                                    fontWeight = FontWeight.SemiBold,
+                                    text = "Playback Failed",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
                                     textAlign = TextAlign.Center,
                                 )
-                            }
 
-                            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xxs))
+                                Text(
+                                    text = "We encountered an issue playing this stream. Please choose another source, try playing in an external player, or retry below.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center,
+                                )
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Button(
-                                    onClick = {
-                                        try {
-                                            uriHandler.openUri(streamUrl)
-                                        } catch (e: Exception) {
-                                            feedbackMessage = "No compatible player found"
+                                if (!feedbackMessage.isNullOrBlank()) {
+                                    Text(
+                                        text = feedbackMessage!!,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MovieHubColors.Success,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
+                                    modifier = Modifier.fillMaxWidth().padding(top = MovieHubDimens.Spacing.xs),
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            playbackState = playbackState.copy(error = null, isLoading = true)
+                                            showLoading = true
+                                            hasStartedPlaying = false
+                                            retryTrigger++
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = Color.White,
+                                        ),
+                                        shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = "Retry",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(MovieHubDimens.Spacing.md),
+                                            )
+                                            Text("Retry", fontWeight = FontWeight.Bold, maxLines = 1)
                                         }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = Color.White,
-                                    ),
-                                    shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
-                                    modifier = Modifier.weight(1.5f),
-                                ) {
-                                    Text("Play Externally", fontWeight = FontWeight.Bold, maxLines = 1)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                uriHandler.openUri(streamUrl)
+                                            } catch (e: Exception) {
+                                                feedbackMessage = "No compatible player found"
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color.White.copy(alpha = 0.08f),
+                                            contentColor = Color.White,
+                                        ),
+                                        shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Text("Play Externally", fontWeight = FontWeight.Bold, maxLines = 1)
+                                    }
                                 }
 
-                                OutlinedButton(
-                                    onClick = {
-                                        clipboardManager.setText(AnnotatedString(streamUrl))
-                                        feedbackMessage = "Link copied to clipboard!"
-                                    },
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = Color.White,
-                                    ),
-                                    shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
-                                    border = androidx.compose.foundation.BorderStroke(MovieHubDimens.Spacing.dp1, Color.White.copy(alpha = 0.2f)),
-                                    modifier = Modifier.weight(1.2f),
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
-                                    Text("Copy Link", maxLines = 1)
-                                }
-                            }
+                                    OutlinedButton(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(streamUrl))
+                                            feedbackMessage = "Link copied to clipboard!"
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = Color.White,
+                                        ),
+                                        shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+                                        border = BorderStroke(MovieHubDimens.Spacing.dp1, Color.White.copy(alpha = 0.2f)),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Text("Copy Link", maxLines = 1)
+                                    }
 
-                            TextButton(
-                                onClick = onBackClick,
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Color.White.copy(alpha = 0.6f),
-                                ),
-                            ) {
-                                Text("Go Back")
+                                    OutlinedButton(
+                                        onClick = onBackClick,
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = Color.White.copy(alpha = 0.6f),
+                                        ),
+                                        shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+                                        border = BorderStroke(MovieHubDimens.Spacing.dp1, Color.White.copy(alpha = 0.12f)),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Text("Go Back", maxLines = 1)
+                                    }
+                                }
+
+                                // Technical details accordion
+                                Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xxs))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(MovieHubDimens.Spacing.sm))
+                                        .clickable { showTechDetails = !showTechDetails }
+                                        .padding(horizontal = MovieHubDimens.Spacing.md, vertical = MovieHubDimens.Spacing.xs),
+                                ) {
+                                    Text(
+                                        text = if (showTechDetails) "Hide Technical Details" else "Show Technical Details",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Icon(
+                                        imageVector = if (showTechDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(MovieHubDimens.Spacing.md),
+                                    )
+                                }
+
+                                if (showTechDetails) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = MovieHubDimens.Player.subtitlePreviewHeight)
+                                            .clip(RoundedCornerShape(MovieHubDimens.Spacing.sm))
+                                            .background(Color.Black.copy(alpha = 0.5f))
+                                            .border(MovieHubDimens.Spacing.dp1, Color.White.copy(alpha = 0.08f), RoundedCornerShape(MovieHubDimens.Spacing.sm))
+                                            .padding(MovieHubDimens.Spacing.md),
+                                    ) {
+                                        Text(
+                                            text = playbackState.error ?: "Unknown error",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                fontSize = MovieHubDimens.Font.xxs,
+                                            ),
+                                            color = Color(0xFFFF8B8B),
+                                            modifier = Modifier.verticalScroll(rememberScrollState()),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1107,7 +1551,7 @@ fun PlayerScreen(
         // Loading overlay with poster blur backdrop and crossfade exit
         // ═══════════════════════════════════════════
         AnimatedVisibility(
-            visible = showLoading && playbackState.error == null,
+            visible = (showLoading || isChangingAudioTrack || isChangingVideoTrack) && playbackState.error == null,
             enter = fadeIn(animationSpec = tween(200)),
             exit = fadeOut(animationSpec = tween(500)),
         ) {
@@ -1116,16 +1560,44 @@ fun PlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 // Blurred poster backdrop (if poster URL is available)
-                if (posterUrl != null) {
+                if (posterUrl != null && posterResource != null) {
                     KamelImage(
-                        resource = { asyncPainterResource(data = posterUrl) },
+                        resource = { posterResource },
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
-                            .blur(24.dp),
+                            .blur(MovieHubDimens.Player.posterBlurRadius),
                         contentScale = ContentScale.Crop,
-                        onLoading = { Box(Modifier.fillMaxSize().background(Color.Black)) },
-                        onFailure = { Box(Modifier.fillMaxSize().background(Color.Black)) },
+                        onLoading = {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF0F0C20),
+                                                Color(0xFF15102A),
+                                                Color(0xFF06040A),
+                                            ),
+                                        ),
+                                    ),
+                            )
+                        },
+                        onFailure = {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF0F0C20),
+                                                Color(0xFF15102A),
+                                                Color(0xFF06040A),
+                                            ),
+                                        ),
+                                    ),
+                            )
+                        },
                     )
                     // Dark overlay on top of the poster for spinner contrast
                     Box(
@@ -1134,11 +1606,19 @@ fun PlayerScreen(
                             .background(Color.Black.copy(alpha = 0.5f)),
                     )
                 } else {
-                    // No poster — fall back to plain dark overlay
+                    // No poster — fall back to rich gradient overlay
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.45f)),
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFF0F0C20),
+                                        Color(0xFF15102A),
+                                        Color(0xFF06040A),
+                                    ),
+                                ),
+                            ),
                     )
                 }
 
@@ -1147,6 +1627,101 @@ fun PlayerScreen(
                     strokeWidth = MovieHubDimens.Spacing.xxs,
                     modifier = Modifier.size(MovieHubDimens.Icon.xxxl),
                 )
+            }
+        }
+
+        // Binge Mode Auto-Play Countdown Card (Netflix Style)
+        AnimatedVisibility(
+            visible = showAutoPlayCountdown && nextEpisodeStream != null,
+            enter = fadeIn(animationSpec = tween(400)) + slideInVertically(initialOffsetY = { it / 2 }),
+            exit = fadeOut(animationSpec = tween(400)) + slideOutVertically(targetOffsetY = { it / 2 }),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = MovieHubDimens.Player.bingeCardSafeAreaEnd, bottom = MovieHubDimens.Player.bingeCardSafeAreaBottom),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(MovieHubDimens.Player.bingeCardWidth)
+                    .clip(RoundedCornerShape(MovieHubDimens.Player.bingeCardCornerRadius))
+                    .background(Color.Black.copy(alpha = 0.75f))
+                    .border(
+                        width = MovieHubDimens.Spacing.dp1,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f),
+                            ),
+                        ),
+                        shape = RoundedCornerShape(MovieHubDimens.Player.bingeCardCornerRadius),
+                    )
+                    .padding(MovieHubDimens.Player.bingeCardPadding),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Player.bingeCardItemSpacing),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "BINGE WATCHING",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = MovieHubDimens.Font.trackingUltraWide,
+                        )
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(MovieHubDimens.Player.bingeCountdownBubbleSize)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        ) {
+                            Text(
+                                text = "$autoPlayCountdownSeconds",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Next: $nextEpisodeTitle",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Player.bingeCardButtonSpacing),
+                    ) {
+                        Button(
+                            onClick = { triggerPlayNext() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                            shape = RoundedCornerShape(MovieHubDimens.Player.bingeCardButtonCorner),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Play Now", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showAutoPlayCountdown = false },
+                            border = BorderStroke(MovieHubDimens.Spacing.dp1, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                            shape = RoundedCornerShape(MovieHubDimens.Player.bingeCardButtonCorner),
+                        ) {
+                            Text("Cancel", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+                        }
+                    }
+                }
             }
         }
     }

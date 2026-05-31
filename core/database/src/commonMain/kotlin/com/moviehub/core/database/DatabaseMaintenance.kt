@@ -84,7 +84,7 @@ class DatabaseMaintenance(private val db: RoomDatabase) {
     suspend fun tableRowCounts(): Map<String, Long> {
         return performSuspending(db, true, false) { connection ->
             val stmt = connection.prepare(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'room_%' AND name NOT LIKE '%_fts%' ORDER BY name"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'room_%' AND name NOT LIKE '%_fts%' ORDER BY name",
             )
             val tables = mutableListOf<String>()
             try {

@@ -15,14 +15,14 @@ fun <T> VerticalGrid(
     columns: Int = 3,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(8.dp),
-    itemContent: @Composable (Int, T) -> Unit
+    itemContent: @Composable (Int, T) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         modifier = modifier,
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         itemsIndexed(items) { index, item ->
             itemContent(index, item)

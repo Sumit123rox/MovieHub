@@ -4,21 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moviehub.core.database.FavoriteDao
 import com.moviehub.core.database.FavoriteEntity
-import com.moviehub.core.database.ContentType as DbContentType
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.TmdbSettingsRepository
 import com.moviehub.core.database.WatchProgress
 import com.moviehub.core.database.WatchProgressDao
-import com.moviehub.feature.details.data.DetailsRepository
 import com.moviehub.core.network.YouTubePlaybackResolver
 import com.moviehub.core.network.tmdb.TmdbService
+import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.core.utils.parseRuntime
+import com.moviehub.feature.details.data.DetailsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import com.moviehub.core.utils.PerformanceMonitor
+import com.moviehub.core.database.ContentType as DbContentType
 
 class DetailsViewModel(
     private val repository: DetailsRepository,
@@ -32,6 +32,7 @@ class DetailsViewModel(
 
     private val _state = MutableStateFlow(DetailsState())
     val state: StateFlow<DetailsState> = _state.asStateFlow()
+    private var streamsJob: kotlinx.coroutines.Job? = null
 
     fun onAction(action: DetailsAction) {
         when (action) {
@@ -75,7 +76,7 @@ class DetailsViewModel(
                     _state.value = _state.value.copy(
                         isLoading = false,
                         mediaItem = details,
-                        error = if (details == null) "Failed to load details" else null
+                        error = if (details == null) "Failed to load details" else null,
                     )
 
                     if (details != null) {
@@ -86,7 +87,9 @@ class DetailsViewModel(
                                 val progress = watchProgressDao.getProgress(id, profileId).firstOrNull()
                                 val percent = if (progress != null && progress.durationMs > 0) {
                                     (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
-                                } else 0f
+                                } else {
+                                    0f
+                                }
                                 _state.value = _state.value.copy(
                                     isFavorite = isFav != null,
                                     isWatched = progress?.isWatched == true,
@@ -116,10 +119,10 @@ class DetailsViewModel(
                                                             id = ytId,
                                                             url = ytId,
                                                             name = "Official Trailer",
-                                                            type = "Trailer"
-                                                        )
-                                                    )
-                                                )
+                                                            type = "Trailer",
+                                                        ),
+                                                    ),
+                                                ),
                                             )
                                         }
                                     }
@@ -132,7 +135,7 @@ class DetailsViewModel(
                 } catch (e: Exception) {
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = "Failed to load details: ${e.message}"
+                        error = "Failed to load details: ${e.message}",
                     )
                 }
             } finally {
@@ -142,25 +145,55 @@ class DetailsViewModel(
     }
 
     private fun loadStreams(id: String, type: String) {
-        viewModelScope.launch {
+        streamsJob?.cancel()
+        streamsJob = viewModelScope.launch {
             PerformanceMonitor.beginSection("VM:Details:loadStreams")
             try {
                 val totalAddons = repository.getStreamAddonCount(type)
                 _state.value = _state.value.copy(
                     isSearchingStreams = true,
                     totalStreamAddons = totalAddons,
-                    processedStreamAddons = 0
+                    processedStreamAddons = 0,
                 )
 
                 try {
-                    var processedCount = 0
-                    repository.getStreamsFlow(id, type).collect { partialStreams ->
-                        processedCount++
-                        val sorted = partialStreams.sortedByDescending { it.playbackPriority }
-                        _state.value = _state.value.copy(
-                            streams = sorted,
-                            processedStreamAddons = processedCount.coerceAtMost(totalAddons)
-                        )
+                    repository.getStreamsFlow(id, type).collect { event ->
+                        when (event) {
+                            is com.moviehub.feature.details.data.StreamsEvent.CachedStreams -> {
+                                val sorted = event.streams.sortedByDescending { it.playbackPriority }
+                                _state.value = _state.value.copy(streams = sorted)
+                            }
+                            is com.moviehub.feature.details.data.StreamsEvent.LoadingStarted -> {
+                                _state.value = _state.value.copy(
+                                    addonStreamStatuses = event.providers,
+                                    processedStreamAddons = 0,
+                                )
+                            }
+                            is com.moviehub.feature.details.data.StreamsEvent.ProviderStatusChanged -> {
+                                val completed = event.allProviders.count {
+                                    it.value is com.moviehub.feature.details.data.AddonStreamStatus.Completed ||
+                                        it.value is com.moviehub.feature.details.data.AddonStreamStatus.TimedOut ||
+                                        it.value is com.moviehub.feature.details.data.AddonStreamStatus.Failed
+                                }
+                                _state.value = _state.value.copy(
+                                    addonStreamStatuses = event.allProviders,
+                                    processedStreamAddons = completed,
+                                )
+                            }
+                            is com.moviehub.feature.details.data.StreamsEvent.StreamsUpdated -> {
+                                val sorted = event.streams.sortedByDescending { it.playbackPriority }
+                                _state.value = _state.value.copy(streams = sorted)
+                            }
+                            is com.moviehub.feature.details.data.StreamsEvent.Completed -> {
+                                val sorted = event.streams.sortedByDescending { it.playbackPriority }
+                                _state.value = _state.value.copy(
+                                    streams = sorted,
+                                    addonStreamStatuses = event.providers,
+                                    isSearchingStreams = false,
+                                    processedStreamAddons = totalAddons,
+                                )
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     _state.value = _state.value.copy(streamsError = e.message)
@@ -181,7 +214,7 @@ class DetailsViewModel(
                 val source = ytResolver.resolveFromYouTubeId(videoId)
                 _state.value = _state.value.copy(
                     isResolvingTrailer = false,
-                    selectedTrailerSource = source
+                    selectedTrailerSource = source,
                 )
             } finally {
                 PerformanceMonitor.endSection()
@@ -204,7 +237,9 @@ class DetailsViewModel(
                     val progress = watchProgressDao.getProgress(mediaItem.id, profileId).firstOrNull()
                     val percent = if (progress != null && progress.durationMs > 0) {
                         (progress.progressMs.toFloat() / progress.durationMs).coerceIn(0f, 1f)
-                    } else 0f
+                    } else {
+                        0f
+                    }
                     _state.value = _state.value.copy(
                         isFavorite = isFav != null,
                         isWatched = progress?.isWatched == true,
@@ -238,8 +273,8 @@ class DetailsViewModel(
                             type = if (mediaItem.type.name == "SHOW") "series" else "movie",
                             progressMs = 0,
                             durationMs = mediaItem.runtime?.let { parseRuntime(it) } ?: 0L,
-                            isWatched = true
-                        )
+                            isWatched = true,
+                        ),
                     )
                     _state.value = _state.value.copy(isWatched = true, isInProgress = false, watchProgressPercent = 0f)
                 }
@@ -268,7 +303,7 @@ class DetailsViewModel(
                             contentType = if (mediaItem.type.name == "SHOW") DbContentType.SHOW else DbContentType.MOVIE,
                             title = mediaItem.title,
                             posterUrl = mediaItem.posterUrl,
-                        )
+                        ),
                     )
                     _state.value = _state.value.copy(isFavorite = true)
                 }

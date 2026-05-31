@@ -1,6 +1,5 @@
 package com.moviehub.feature.sync.presentation
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,14 +24,14 @@ fun SyncScreen() {
 
     SyncContent(
         syncState = currentState,
-        onSyncNow = viewModel::onSyncNow
+        onSyncNow = viewModel::onSyncNow,
     )
 }
 
 @Composable
 private fun SyncContent(
     syncState: SyncState,
-    onSyncNow: () -> Unit
+    onSyncNow: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -40,42 +39,58 @@ private fun SyncContent(
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
         Spacer(Modifier.weight(1f))
 
         // Status icon
         Icon(
-            imageVector = if (syncState.isSyncing) Icons.Rounded.Sync
-            else if (syncState.lastSyncError != null) Icons.Rounded.SyncDisabled
-            else Icons.Rounded.CloudSync,
+            imageVector = if (syncState.isSyncing) {
+                Icons.Rounded.Sync
+            } else if (syncState.lastSyncError != null) {
+                Icons.Rounded.SyncDisabled
+            } else {
+                Icons.Rounded.CloudSync
+            },
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = if (syncState.lastSyncError != null) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.primary
+            tint = if (syncState.lastSyncError != null) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
         )
 
         Text(
-            text = if (syncState.isSyncing) "Syncing..."
-            else if (syncState.lastSyncError != null) "Sync Error"
-            else "Sync with Trakt & Real-Debrid",
+            text = if (syncState.isSyncing) {
+                "Syncing..."
+            } else if (syncState.lastSyncError != null) {
+                "Sync Error"
+            } else {
+                "Sync with Trakt & Real-Debrid"
+            },
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
 
         // Last sync time
         val timeMs = syncState.lastSyncTime
         if (timeMs != null) {
             val secondsAgo = (currentTimeMillis() - timeMs) / 1000
-            val timeText: String = if (secondsAgo < 60L) "Just now"
-            else if (secondsAgo < 3600L) "${secondsAgo / 60} min ago"
-            else if (secondsAgo < 86400L) "${secondsAgo / 3600} h ago"
-            else "${secondsAgo / 86400} d ago"
+            val timeText: String = if (secondsAgo < 60L) {
+                "Just now"
+            } else if (secondsAgo < 3600L) {
+                "${secondsAgo / 60} min ago"
+            } else if (secondsAgo < 86400L) {
+                "${secondsAgo / 3600} h ago"
+            } else {
+                "${secondsAgo / 86400} d ago"
+            }
             Text(
                 text = "Last synced: $timeText  -  ${syncState.itemsSynced} items",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -83,14 +98,14 @@ private fun SyncContent(
         if (syncState.lastSyncError != null) {
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                ),
             ) {
                 Text(
                     text = syncState.lastSyncError,
                     modifier = Modifier.padding(12.dp),
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
@@ -99,13 +114,13 @@ private fun SyncContent(
         Button(
             onClick = onSyncNow,
             enabled = !syncState.isSyncing,
-            modifier = Modifier.fillMaxWidth(0.6f)
+            modifier = Modifier.fillMaxWidth(0.6f),
         ) {
             if (syncState.isSyncing) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
                 Spacer(Modifier.width(8.dp))
             }

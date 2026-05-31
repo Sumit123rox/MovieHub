@@ -27,13 +27,13 @@ import kotlinx.coroutines.flow.asStateFlow
 actual class TorrentEngine actual constructor(private val ctx: PlatformContext) {
     private val _progress = MutableStateFlow(emptyList<TorrentProgress>())
     actual val progress: StateFlow<List<TorrentProgress>> = _progress.asStateFlow()
-    actual var isRunning: Boolean = false
-        private set
+    private var _isRunning = false
+    actual val isRunning: Boolean get() = _isRunning
 
     actual suspend fun start(config: TorrentConfig): Int {
         // iOS: initialize libtorrent session, start embedded HTTP server
         // For stub: report engine as available but no-op
-        isRunning = true
+        _isRunning = true
         return config.httpStreamPort
     }
 
@@ -50,7 +50,7 @@ actual class TorrentEngine actual constructor(private val ctx: PlatformContext) 
     actual fun removeTorrent(torrentId: String) {}
 
     actual suspend fun stop() {
-        isRunning = false
+        _isRunning = false
         _progress.value = emptyList()
     }
 }

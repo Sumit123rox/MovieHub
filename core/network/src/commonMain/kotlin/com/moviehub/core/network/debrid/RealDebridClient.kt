@@ -31,7 +31,7 @@ class RealDebridClient(
             httpClient.post("$OAUTH_BASE/device/code") {
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody("client_id=$CLIENT_ID&new_connection=yes")
-            }.bodyAsText()
+            }.bodyAsText(),
         )
     }
 
@@ -54,7 +54,7 @@ class RealDebridClient(
                 header("Authorization", "Bearer $it")
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody("magnet=$magnet")
-            }.bodyAsText()
+            }.bodyAsText(),
         )
     }
 
@@ -62,7 +62,7 @@ class RealDebridClient(
         json.decodeFromString<TorrentInfo>(
             httpClient.get("$API_BASE/torrents/info/$torrentId") {
                 header("Authorization", "Bearer $it")
-            }.bodyAsText()
+            }.bodyAsText(),
         )
     }
 
@@ -81,7 +81,7 @@ class RealDebridClient(
                 header("Authorization", "Bearer $it")
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody("link=$link")
-            }.bodyAsText()
+            }.bodyAsText(),
         )
         resp.download
     }
@@ -90,11 +90,15 @@ class RealDebridClient(
         val body = httpClient.get("$API_BASE/torrents/instantAvailability/$hash") {
             header("Authorization", "Bearer $it")
         }.bodyAsText()
+
         @Suppress("UNCHECKED_CAST")
         val map = json.decodeFromString<Map<String, List<List<Map<String, String>>>>>(body)
         val variants = map[hash]
-        if (variants.isNullOrEmpty()) emptyList()
-        else variants.flatten().mapNotNull { it["filename"] }
+        if (variants.isNullOrEmpty()) {
+            emptyList()
+        } else {
+            variants.flatten().mapNotNull { it["filename"] }
+        }
     }
 
     // ── Full resolution pipeline ────────────────────────────────────
@@ -162,7 +166,7 @@ class RealDebridClient(
     // ── Helpers ─────────────────────────────────────────────────────
 
     private suspend inline fun <T> withToken(crossinline block: suspend (token: String) -> T): Result<T> {
-        val token = settingsRepository.getApiKey()
+        val token = settingsRepository.getApiKey("realdebrid")
         if (token.isBlank()) return Result.failure(Exception("Real-Debrid not authenticated"))
         return withRetry { block(token) }
     }

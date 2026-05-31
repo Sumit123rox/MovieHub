@@ -14,10 +14,10 @@ class IntegrationTest {
             apiClient.getCatalog(
                 baseUrl = "https://v3-cinemeta.strem.io",
                 type = "movie",
-                id = "top"
+                id = "top",
             )
         }
-        
+
         assertTrue(result.isSuccess, "Failed to fetch from Cinemeta: ${result.exceptionOrNull()}")
         assertTrue(result.getOrNull()?.metas?.isNotEmpty() == true, "Cinemeta returned empty catalog")
     }

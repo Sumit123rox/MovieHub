@@ -27,7 +27,7 @@ class ProfileRepository(private val profileDao: ProfileDao) {
             avatarUrl = avatarUrl,
             pin = pin,
             isChild = isChild,
-            createdAt = now
+            createdAt = now,
         )
         profileDao.insertProfile(profile.toEntity())
         return profile

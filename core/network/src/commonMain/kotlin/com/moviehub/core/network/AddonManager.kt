@@ -1,13 +1,12 @@
 package com.moviehub.core.network
 
+import co.touchlab.kermit.Logger
 import com.moviehub.core.database.AddonDao
 import com.moviehub.core.database.AddonEntity
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.model.StremioManifest
-import co.touchlab.kermit.Logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -20,34 +19,47 @@ private val addonManagerExceptionHandler = CoroutineExceptionHandler { _, e ->
 class AddonManager(
     private val addonDao: AddonDao,
     private val profileRepository: ProfileRepository,
-    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default
+    private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + addonManagerExceptionHandler)
 
+    private val _isLoaded = MutableStateFlow(false)
+    val isLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
+
     val installedAddons: StateFlow<List<StremioManifest>> = profileRepository.activeProfile
         .flatMapLatest { profile ->
-            if (profile == null) flowOf(emptyList())
-            else addonDao.getAllAddons(profile.id).map { entities ->
-                entities.map { Json.decodeFromString<StremioManifest>(it.manifest) }
+            _isLoaded.value = false
+            if (profile == null) {
+                flowOf(emptyList())
+            } else {
+                addonDao.getAllAddons(profile.id).map { entities ->
+                    entities.map { Json.decodeFromString<StremioManifest>(it.manifest) }
+                }
             }
+        }
+        .onEach {
+            _isLoaded.value = true
         }
         .stateIn(
             scope = scope,
             started = SharingStarted.Eagerly,
-            initialValue = emptyList()
+            initialValue = emptyList(),
         )
 
     private val _addonUrlMap: StateFlow<Map<String, String>> = profileRepository.activeProfile
         .flatMapLatest { profile ->
-            if (profile == null) flowOf(emptyMap())
-            else addonDao.getAllAddons(profile.id).map { entities ->
-                entities.associate { it.id to it.url }
+            if (profile == null) {
+                flowOf(emptyMap())
+            } else {
+                addonDao.getAllAddons(profile.id).map { entities ->
+                    entities.associate { it.id to it.url }
+                }
             }
         }
         .stateIn(
             scope = scope,
             started = SharingStarted.Eagerly,
-            initialValue = emptyMap()
+            initialValue = emptyMap(),
         )
 
     fun dispose() {
@@ -60,7 +72,7 @@ class AddonManager(
             id = manifest.id,
             profileId = profileId,
             url = url,
-            manifest = Json.encodeToString(manifest)
+            manifest = Json.encodeToString(manifest),
         )
         addonDao.insertAddon(entity)
     }
@@ -88,12 +100,11 @@ class AddonManager(
 
         return installedAddons.value
             .filter { manifest ->
-                manifest.resources.contains(resource) && 
-                (manifest.types.isEmpty() || manifest.types.any { it.lowercase() in typeAliases })
+                manifest.resources.contains(resource) &&
+                    (manifest.types.isEmpty() || manifest.types.any { it.lowercase() in typeAliases })
             }
-            .mapNotNull { manifest -> 
-                _addonUrlMap.value[manifest.id]?.let { url -> url to manifest } 
+            .mapNotNull { manifest ->
+                _addonUrlMap.value[manifest.id]?.let { url -> url to manifest }
             }
     }
 }
-

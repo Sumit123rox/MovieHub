@@ -37,6 +37,9 @@ class PluginRepository(
     private val _uiState = MutableStateFlow(PluginsUiState())
     val uiState: StateFlow<PluginsUiState> = _uiState.asStateFlow()
 
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
     private val stateLock = SynchronizedObject()
     private var initialized = false
     private var currentProfileId = "default"
@@ -58,8 +61,11 @@ class PluginRepository(
                                 cancelActiveRefreshes()
                                 currentProfileId = nextProfileId
                                 initialized = false
+                                _isInitialized.value = false
                                 true
-                            } else false
+                            } else {
+                                false
+                            }
                         }
                         if (needsInit) loadAndInitializePlugins()
                     } catch (e: Exception) {
@@ -94,7 +100,7 @@ class PluginRepository(
                     scraperCount = it.scraperCount,
                     lastUpdated = it.lastUpdated,
                     isRefreshing = false,
-                    errorMessage = null
+                    errorMessage = null,
                 )
             } ?: emptyList(),
             scrapers = stored?.scrapers?.map {
@@ -111,9 +117,9 @@ class PluginRepository(
                     logo = it.logo,
                     contentLanguage = it.contentLanguage,
                     formats = it.formats,
-                    code = it.code
+                    code = it.code,
                 )
-            } ?: emptyList()
+            } ?: emptyList(),
         )
 
         _uiState.value = state
@@ -127,11 +133,12 @@ class PluginRepository(
                     id = scraper.id,
                     name = scraper.name,
                     code = scraper.code,
-                    supportedTypes = scraper.supportedTypes
+                    supportedTypes = scraper.supportedTypes,
                 )
             }
         }
         log.i { "Loaded ${state.repositories.size} plugin repositories with ${state.scrapers.size} cached scrapers." }
+        _isInitialized.value = true
     }
 
     /**
@@ -159,7 +166,7 @@ class PluginRepository(
                     repositories = state.repositories + repo,
                     scrapers = state.scrapers.filterNot { it.repositoryUrl == manifestUrl } + scrapers,
                     isInstalling = false,
-                    successMessage = "Successfully installed ${repo.name}"
+                    successMessage = "Successfully installed ${repo.name}",
                 )
             }
 
@@ -181,7 +188,7 @@ class PluginRepository(
         _uiState.update { state ->
             state.copy(
                 repositories = state.repositories.filterNot { it.manifestUrl == manifestUrl },
-                scrapers = state.scrapers.filterNot { it.repositoryUrl == manifestUrl }
+                scrapers = state.scrapers.filterNot { it.repositoryUrl == manifestUrl },
             )
         }
         persist()
@@ -201,7 +208,7 @@ class PluginRepository(
                     } else {
                         scraper
                     }
-                }
+                },
             )
         }
         persist()
@@ -242,7 +249,7 @@ class PluginRepository(
                             }
                             state.copy(
                                 repositories = updatedRepos,
-                                scrapers = state.scrapers.filterNot { it.repositoryUrl == manifestUrl } + scrapers
+                                scrapers = state.scrapers.filterNot { it.repositoryUrl == manifestUrl } + scrapers,
                             )
                         },
                         onFailure = { error ->
@@ -251,14 +258,14 @@ class PluginRepository(
                                     if (existing.manifestUrl == manifestUrl) {
                                         existing.copy(
                                             isRefreshing = false,
-                                            errorMessage = error.message ?: "Unable to refresh repository"
+                                            errorMessage = error.message ?: "Unable to refresh repository",
                                         )
                                     } else {
                                         existing
                                     }
-                                }
+                                },
                             )
-                        }
+                        },
                     )
                 }
                 persist()
@@ -319,7 +326,7 @@ class PluginRepository(
                         logo = info.logo,
                         contentLanguage = info.contentLanguage ?: emptyList(),
                         formats = info.formats ?: info.supportedFormats,
-                        code = code
+                        code = code,
                     )
                 }.getOrNull()
             }
@@ -332,7 +339,7 @@ class PluginRepository(
             scraperCount = scrapers.size,
             lastUpdated = currentEpochMillis(),
             isRefreshing = false,
-            errorMessage = null
+            errorMessage = null,
         )
         repo to scrapers
     }
@@ -355,7 +362,7 @@ class PluginRepository(
                     } else {
                         repo
                     }
-                }
+                },
             )
         }
     }
@@ -369,7 +376,7 @@ class PluginRepository(
                     id = scraper.id,
                     name = scraper.name,
                     code = scraper.code,
-                    supportedTypes = scraper.supportedTypes
+                    supportedTypes = scraper.supportedTypes,
                 )
             }
         }
@@ -396,7 +403,7 @@ class PluginRepository(
                     description = repo.description,
                     version = repo.version,
                     scraperCount = repo.scraperCount,
-                    lastUpdated = repo.lastUpdated
+                    lastUpdated = repo.lastUpdated,
                 )
             },
             scrapers = state.scrapers.map { scraper ->
@@ -413,9 +420,9 @@ class PluginRepository(
                     logo = scraper.logo,
                     contentLanguage = scraper.contentLanguage,
                     formats = scraper.formats,
-                    code = scraper.code
+                    code = scraper.code,
                 )
-            }
+            },
         )
         pluginStorage.saveState(currentProfileId, json.encodeToString(payload))
     }

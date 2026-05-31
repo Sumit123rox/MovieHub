@@ -2,8 +2,8 @@ package com.moviehub.feature.search.data
 
 import com.moviehub.core.database.MediaFtsDao
 import com.moviehub.core.model.MediaItem
-import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.AddonManager
+import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.mapper.toDomain
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -47,7 +47,7 @@ class SearchRepositoryImpl(
                             baseUrl = url,
                             type = "movie",
                             id = "top",
-                            extra = mapOf("search" to query)
+                            extra = mapOf("search" to query),
                         )
                         response?.metas?.toDomain(addonId = manifest.id, addonUrl = url) ?: emptyList()
                     } catch (_: Exception) {

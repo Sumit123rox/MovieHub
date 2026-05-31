@@ -5,7 +5,7 @@ import com.moviehub.core.utils.currentTimeMillis
 
 @Entity(
     tableName = "watch_history",
-    primaryKeys = ["mediaId", "profileId"]
+    primaryKeys = ["mediaId", "profileId"],
 )
 data class WatchHistoryEntity(
     val mediaId: String,
@@ -13,5 +13,5 @@ data class WatchHistoryEntity(
     val title: String,
     val type: String,
     val posterPath: String?,
-    val lastWatchedAt: Long = currentTimeMillis()
+    val lastWatchedAt: Long = currentTimeMillis(),
 )

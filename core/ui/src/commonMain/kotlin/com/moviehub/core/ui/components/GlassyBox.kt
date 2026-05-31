@@ -27,7 +27,7 @@ fun GlassyBox(
     modifier: Modifier = Modifier,
     blurRadius: Dp = 16.dp,
     baseAlpha: Float = 0.35f,
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
         modifier = modifier
@@ -37,19 +37,19 @@ fun GlassyBox(
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
-                        Color.Transparent
-                    )
+                        Color.Transparent,
+                    ),
                 ),
-                shape = RoundedCornerShape(12.dp)
-            )
+                shape = RoundedCornerShape(12.dp),
+            ),
     ) {
         // Solid base layer for legibility
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .background(
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-                )
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                ),
         )
 
         // Blurred background layer
@@ -61,10 +61,10 @@ fun GlassyBox(
                     Brush.verticalGradient(
                         colors = listOf(
                             MaterialTheme.colorScheme.onSurface.copy(alpha = baseAlpha),
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = baseAlpha * 0.5f)
-                        )
-                    )
-                )
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = baseAlpha * 0.5f),
+                        ),
+                    ),
+                ),
         )
 
         // Content layer (not blurred)

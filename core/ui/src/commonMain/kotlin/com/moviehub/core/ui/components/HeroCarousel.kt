@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,8 +40,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import androidx.compose.ui.draw.blur
 import com.moviehub.core.model.MediaItem
+import com.moviehub.core.ui.theme.MovieHubDimens
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import kotlinx.coroutines.CancellationException
@@ -53,7 +54,7 @@ import kotlin.time.Duration.Companion.milliseconds
 fun HeroCarousel(
     items: List<MediaItem>,
     onItemClick: (MediaItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) return
 
@@ -72,7 +73,7 @@ fun HeroCarousel(
                 try {
                     pagerState.animateScrollToPage(
                         pagerState.currentPage + 1,
-                        animationSpec = tween(600)
+                        animationSpec = tween(600),
                     )
                 } catch (e: CancellationException) {
                     if (!isActive) throw e
@@ -92,27 +93,24 @@ fun HeroCarousel(
     }
 
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val gradientStartY = with(androidx.compose.ui.platform.LocalDensity.current) { 180.dp.toPx() }
+    val gradientStartY = with(androidx.compose.ui.platform.LocalDensity.current) { MovieHubDimens.Carousel.gradientStartY.toPx() }
 
-    Box(modifier = modifier.fillMaxWidth().height(650.dp)) {
+    Box(modifier = modifier.fillMaxWidth().height(MovieHubDimens.Carousel.containerHeight)) {
         // 1. Background Plate (Blurred background that bleeds)
         val currentItem by remember { derivedStateOf { items[pagerState.currentPage % items.size] } }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // Background plate with blur — Crossfade removed since the gradient
-            // overlay and pager animation provide enough visual continuity.
-            // Rendering two blurred images simultaneously (Crossfade) doubles GPU work.
             KamelImage(
                 resource = {
                     asyncPainterResource(
-                        data = currentItem.posterUrl ?: currentItem.backgroundUrl ?: ""
+                        data = currentItem.posterUrl ?: currentItem.backgroundUrl ?: "",
                     )
                 },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(8.dp)
+                    .blur(MovieHubDimens.Spacing.sm),
             )
 
             // Top gradient for status bar and header clarity
@@ -125,10 +123,10 @@ fun HeroCarousel(
                                 Color.Black.copy(alpha = 0.4f),
                                 Color.Transparent,
                                 MaterialTheme.colorScheme.background.copy(alpha = 0.5f),
-                                MaterialTheme.colorScheme.background
-                            )
-                        )
-                    )
+                                MaterialTheme.colorScheme.background,
+                            ),
+                        ),
+                    ),
             )
         }
 
@@ -137,12 +135,12 @@ fun HeroCarousel(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = 48.dp,
-                top = statusBarPadding + 24.dp,
-                end = 48.dp,
-                bottom = 48.dp
+                start = MovieHubDimens.Carousel.horizontalPadding,
+                top = statusBarPadding + MovieHubDimens.Spacing.xxl,
+                end = MovieHubDimens.Carousel.horizontalPadding,
+                bottom = MovieHubDimens.Carousel.bottomPadding,
             ),
-            pageSpacing = 16.dp
+            pageSpacing = MovieHubDimens.Carousel.pageSpacing,
         ) { page ->
             val item = items[page % items.size]
             val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
@@ -158,24 +156,24 @@ fun HeroCarousel(
                         alpha = lerp(0.5f, 1f, progress)
                         translationY = (1f - progress) * -24f
                     },
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(MovieHubDimens.Carousel.itemCornerRadius))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { onItemClick(item) }
+                        .clickable { onItemClick(item) },
                 ) {
                     KamelImage(
                         resource = {
                             asyncPainterResource(
-                                data = item.posterUrl ?: item.backgroundUrl ?: ""
+                                data = item.posterUrl ?: item.backgroundUrl ?: "",
                             )
                         },
                         contentDescription = item.title,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
                     )
 
                     // Card Bottom Gradient
@@ -186,45 +184,45 @@ fun HeroCarousel(
                                 Brush.verticalGradient(
                                     colors = listOf(
                                         Color.Transparent,
-                                        Color.Black.copy(alpha = 0.5f)
+                                        Color.Black.copy(alpha = 0.5f),
                                     ),
-                                    startY = gradientStartY
-                                )
-                            )
+                                    startY = gradientStartY,
+                                ),
+                            ),
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.lg))
 
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.md))
 
                 // Watch Now Button
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(MovieHubDimens.Radius.md))
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.White,
-                                    Color(0xFFD3D3D3)
-                                )
-                            )
+                                    Color(0xFFD3D3D3),
+                                ),
+                            ),
                         )
                         .clickable { onItemClick(item) }
-                        .padding(horizontal = 32.dp, vertical = 10.dp)
+                        .padding(horizontal = MovieHubDimens.Spacing.xxxl, vertical = MovieHubDimens.Spacing.ms),
                 ) {
                     Text(
                         text = "Details",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.Black
+                        color = Color.Black,
                     )
                 }
             }
@@ -236,7 +234,7 @@ fun HeroCarousel(
             count = items.size,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
+                .padding(bottom = MovieHubDimens.Spacing.xxl),
         )
     }
 }
@@ -245,35 +243,39 @@ fun HeroCarousel(
 fun ReactiveIndicator(
     pagerState: PagerState,
     count: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val currentPage by remember { derivedStateOf { pagerState.currentPage % count } }
     val offsetFraction by remember { derivedStateOf { pagerState.currentPageOffsetFraction } }
 
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Carousel.indicatorSpacing),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(count) { index ->
             val isSelected = currentPage == index
 
             val width = if (isSelected) {
-                lerp(24f, 8f, offsetFraction.absoluteValue).dp
+                lerp(MovieHubDimens.Carousel.indicatorDotMax.value, MovieHubDimens.Carousel.indicatorDotMin.value, offsetFraction.absoluteValue).dp
             } else if ((pagerState.currentPage + 1) % count == index && offsetFraction > 0) {
-                lerp(8f, 24f, offsetFraction).dp
+                lerp(MovieHubDimens.Carousel.indicatorDotMin.value, MovieHubDimens.Carousel.indicatorDotMax.value, offsetFraction).dp
             } else if ((pagerState.currentPage - 1 + count) % count == index && offsetFraction < 0) {
-                lerp(8f, 24f, offsetFraction.absoluteValue).dp
+                lerp(MovieHubDimens.Carousel.indicatorDotMin.value, MovieHubDimens.Carousel.indicatorDotMax.value, offsetFraction.absoluteValue).dp
             } else {
-                8.dp
+                MovieHubDimens.Carousel.indicatorDotMin
             }
 
             val color =
-                if (isSelected) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(
-                    alpha = 0.4f
-                )
+                if (isSelected) {
+                    MaterialTheme.colorScheme.onBackground
+                } else {
+                    MaterialTheme.colorScheme.onBackground.copy(
+                        alpha = 0.4f,
+                    )
+                }
 
-            Box(modifier = Modifier.height(6.dp).width(width).clip(CircleShape).background(color))
+            Box(modifier = Modifier.height(MovieHubDimens.Carousel.indicatorHeight).width(width).clip(CircleShape).background(color))
         }
     }
 }

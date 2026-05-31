@@ -11,7 +11,7 @@ actual class MovieDatabaseFactory actual constructor(private val ctx: PlatformCo
         return Room.databaseBuilder<MovieDatabase>(
             context = ctx,
             name = dbFile.absolutePath,
-            factory = MovieDatabaseConstructor::initialize
+            factory = MovieDatabaseConstructor::initialize,
         )
             .configureDatabase()
             .build()

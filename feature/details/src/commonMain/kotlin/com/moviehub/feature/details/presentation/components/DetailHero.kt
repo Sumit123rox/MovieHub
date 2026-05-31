@@ -19,9 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.MediaItem
@@ -71,7 +71,7 @@ fun DetailHero(
                             },
                         alignment = if (isTablet) Alignment.TopCenter else Alignment.Center,
                         contentScale = ContentScale.Crop,
-                        onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
+                        onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) },
                     )
                 } else {
                     Box(
@@ -116,7 +116,7 @@ fun DetailHero(
                             modifier = Modifier
                                 .fillMaxWidth(if (isTablet) 0.56f else 0.6f)
                                 .widthIn(max = contentMaxWidth)
-                                .height(if (isTablet) 72.dp else 80.dp)
+                                .height(if (isTablet) 72.dp else 80.dp),
                         ) {
                             // Subtle light-glow behind the logo for visibility
                             Box(
@@ -126,10 +126,10 @@ fun DetailHero(
                                         Brush.radialGradient(
                                             colors = listOf(
                                                 Color.White.copy(alpha = 0.15f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    )
+                                                Color.Transparent,
+                                            ),
+                                        ),
+                                    ),
                             )
 
                             KamelImage(
@@ -138,7 +138,7 @@ fun DetailHero(
                                 modifier = Modifier.fillMaxSize(),
                                 alignment = Alignment.Center,
                                 contentScale = ContentScale.Fit,
-                                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
+                                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) },
                             )
                         }
                     }
@@ -155,14 +155,14 @@ fun DetailHero(
                             text = media.title,
                             style = MaterialTheme.typography.headlineSmall.copy(
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = (-0.3).sp
+                                letterSpacing = (-0.3).sp,
                             ),
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.graphicsLayer {
                                 shadowElevation = 4f
-                            }
+                            },
                         )
                         val subtitleParts = buildList {
                             media.releaseInfo?.take(4)?.let { add(it) }
@@ -173,12 +173,12 @@ fun DetailHero(
                                 text = subtitleParts.joinToString(" • "),
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Medium,
-                                    letterSpacing = 0.2.sp
+                                    letterSpacing = 0.2.sp,
                                 ),
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 4.dp)
+                                modifier = Modifier.padding(top = 4.dp),
                             )
                         }
                     }

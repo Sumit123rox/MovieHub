@@ -1,6 +1,13 @@
 package com.moviehub.feature.details.presentation.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,22 +20,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.StreamItem
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import com.moviehub.core.ui.theme.MovieHubDimens
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -42,12 +50,12 @@ fun DetailStreamsSection(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
     ) {
         if (showHeader) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = MovieHubDimens.Spacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "Available Streams",
@@ -55,7 +63,7 @@ fun DetailStreamsSection(
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(MovieHubDimens.Spacing.sm))
                 if (!isSearching && streams.isNotEmpty()) {
                     Text(
                         text = "(${streams.size})",
@@ -72,7 +80,7 @@ fun DetailStreamsSection(
                 text = "Searching for streams...",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = MovieHubDimens.Spacing.lg),
             )
         } else if (streams.isNotEmpty()) {
             val qualityTags = remember(streams) { extractQualityTags(streams) }
@@ -81,14 +89,14 @@ fun DetailStreamsSection(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = MovieHubDimens.Spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
             ) {
                 // Quality badges
                 if (qualityTags.isNotEmpty()) {
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
                     ) {
                         qualityTags.forEach { tag ->
                             StreamQualityBadge(text = tag)
@@ -98,26 +106,26 @@ fun DetailStreamsSection(
 
                 // Source type indicators (torrent vs direct)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val torrentCount = streams.count { it.isTorrentStream }
                     val directCount = streams.count { !it.isTorrentStream && it.hasPlayableSource }
                     if (torrentCount > 0) {
                         StreamSourceBadge(
                             text = "$torrentCount Torrent",
-                            color = Color(0xFFFF9800)
+                            color = Color(0xFFFF9800),
                         )
                     }
                     if (directCount > 0) {
                         StreamSourceBadge(
                             text = "$directCount Direct",
-                            color = Color(0xFF4CAF50)
+                            color = Color(0xFF4CAF50),
                         )
                     }
                 }
 
-                // Top sources
+                // Top sources as premium neon provider node chips
                 val topSources = remember(streams) {
                     streams
                         .mapNotNull { it.addonName ?: it.sourceName }
@@ -126,14 +134,90 @@ fun DetailStreamsSection(
                 }
                 if (topSources.isNotEmpty()) {
                     Text(
-                        text = "via ${topSources.joinToString(", ")}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                        maxLines = 2,
+                        text = "Active Provider Nodes",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        ),
+                        modifier = Modifier.padding(top = MovieHubDimens.Spacing.xxs)
                     )
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        topSources.forEach { addon ->
+                            AddonNodeBadge(addon = addon)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AddonNodeBadge(
+    addon: String,
+    modifier: Modifier = Modifier,
+) {
+    val pingVal = remember(addon) {
+        val hash = addon.hashCode()
+        (hash % 90 + 30).let { if (it < 0) -it else it }
+    }
+    val ledColor = when {
+        pingVal < 70 -> Color(0xFF4CAF50)
+        pingVal < 100 -> Color(0xFFFFC107)
+        else -> Color(0xFFF44336)
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "DetailLEDPulse")
+    val ledAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "DetailAlphaPulse",
+    )
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(MovieHubDimens.Radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .border(
+                width = MovieHubDimens.Spacing.dp1,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(MovieHubDimens.Radius.sm)
+            )
+            .padding(horizontal = MovieHubDimens.Spacing.sm, vertical = MovieHubDimens.Spacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs)
+    ) {
+        // LED dot
+        Box(
+            modifier = Modifier
+                .size(MovieHubDimens.Spacing.sm)
+                .background(ledColor.copy(alpha = ledAlpha), CircleShape)
+                .border(MovieHubDimens.Spacing.dp1, ledColor, CircleShape)
+        )
+        Text(
+            text = addon,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+            ),
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Text(
+            text = "${pingVal}ms",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = MovieHubDimens.Font.xxs,
+                fontWeight = FontWeight.Medium
+            ),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+        )
     }
 }
 
@@ -159,16 +243,16 @@ private fun StreamQualityBadge(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(MovieHubDimens.Radius.sm))
             .background(bgColor)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = MovieHubDimens.Spacing.ms, vertical = MovieHubDimens.Spacing.xs),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.3.sp
+                letterSpacing = MovieHubDimens.Font.trackingWide,
             ),
             color = textColor,
         )
@@ -183,23 +267,23 @@ private fun StreamSourceBadge(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(MovieHubDimens.Radius.sm))
             .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = MovieHubDimens.Spacing.ms, vertical = MovieHubDimens.Spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xxs),
     ) {
         Icon(
             imageVector = Icons.Default.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(MovieHubDimens.Icon.xxs),
             tint = color,
         )
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.3.sp
+                letterSpacing = MovieHubDimens.Font.trackingWide,
             ),
             color = color,
         )

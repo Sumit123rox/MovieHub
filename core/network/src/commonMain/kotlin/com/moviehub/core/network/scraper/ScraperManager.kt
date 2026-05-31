@@ -1,16 +1,16 @@
 package com.moviehub.core.network.scraper
 
 import co.touchlab.kermit.Logger
-import com.moviehub.core.model.StreamItem
 import com.moviehub.core.model.StreamBehaviorHints
+import com.moviehub.core.model.StreamItem
 import com.moviehub.core.model.StreamProxyHeaders
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.internal.SynchronizedObject
 import kotlinx.coroutines.internal.synchronized
+import kotlinx.coroutines.supervisorScope
 
 /**
  * Central orchestrator for user-installed JS plugin scrapers.
@@ -23,6 +23,7 @@ class ScraperManager(
     private val log = Logger.withTag("ScraperManager")
 
     private val lock = SynchronizedObject()
+
     // Dynamic JS plugin scrapers loaded at runtime from user-installed addons
     private val jsPluginScrapers = mutableListOf<JsPluginScraper>()
 
@@ -169,8 +170,8 @@ class ScraperManager(
             behaviorHints = StreamBehaviorHints(
                 proxyHeaders = headers?.takeIf { it.isNotEmpty() }?.let { h ->
                     StreamProxyHeaders(request = h)
-                }
-            )
+                },
+            ),
         )
     }
 

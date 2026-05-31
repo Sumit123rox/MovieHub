@@ -23,11 +23,11 @@ class AddonManagerTest {
     private class FakeAddonDao : AddonDao {
         val addons = MutableStateFlow<List<AddonEntity>>(emptyList())
         override fun getAllAddons(profileId: String): Flow<List<AddonEntity>> = addons
-        
+
         override suspend fun insertAddon(addon: AddonEntity) {
             addons.value = addons.value.filterNot { it.id == addon.id && it.profileId == addon.profileId } + addon
         }
-        
+
         override suspend fun deleteAddon(id: String, profileId: String) {
             addons.value = addons.value.filterNot { it.id == id && it.profileId == profileId }
         }
@@ -49,36 +49,36 @@ class AddonManagerTest {
         val mockProfileRepository = ProfileRepository(mockProfileDao)
         val testProfile = Profile(id = "test-profile", name = "Test User")
         mockProfileRepository.setActiveProfile(testProfile)
-        
+
         // Add Cinemeta to pre-populate the DB
         val cinemetaManifest = StremioManifest(
             id = "org.stremio.cinemeta",
             name = "Cinemeta",
-            version = "3.0.0"
+            version = "3.0.0",
         )
         mockAddonDao.insertAddon(
             AddonEntity(
                 id = cinemetaManifest.id,
                 profileId = "test-profile",
                 url = "https://v3-cinemeta.strem.io",
-                manifest = Json.encodeToString(cinemetaManifest)
-            )
+                manifest = Json.encodeToString(cinemetaManifest),
+            ),
         )
-        
+
         val addonManager = AddonManager(mockAddonDao, mockProfileRepository, UnconfinedTestDispatcher())
-        
+
         val testManifest = StremioManifest(
             id = "new.addon",
             name = "New Addon",
             version = "1.0.0",
             types = listOf("movie"),
             resources = emptyList(),
-            catalogs = emptyList()
+            catalogs = emptyList(),
         )
-        
+
         addonManager.addAddon("https://test.com", testManifest)
         runCurrent() // let flows update
-        
+
         val addons = addonManager.installedAddons.value
         assertEquals(2, addons.size) // Cinemeta + New Addon
         assertEquals("https://test.com", addonManager.getAddonUrl("new.addon"))
@@ -91,33 +91,33 @@ class AddonManagerTest {
         val mockProfileRepository = ProfileRepository(mockProfileDao)
         val testProfile = Profile(id = "test-profile", name = "Test User")
         mockProfileRepository.setActiveProfile(testProfile)
-        
+
         // Add Cinemeta to pre-populate the DB
         val cinemetaManifest = StremioManifest(
             id = "org.stremio.cinemeta",
             name = "Cinemeta",
-            version = "3.0.0"
+            version = "3.0.0",
         )
         mockAddonDao.insertAddon(
             AddonEntity(
                 id = cinemetaManifest.id,
                 profileId = "test-profile",
                 url = "https://v3-cinemeta.strem.io",
-                manifest = Json.encodeToString(cinemetaManifest)
-            )
+                manifest = Json.encodeToString(cinemetaManifest),
+            ),
         )
-        
+
         val addonManager = AddonManager(mockAddonDao, mockProfileRepository, UnconfinedTestDispatcher())
-        
+
         val testManifest = StremioManifest(
             id = "org.stremio.cinemeta",
             name = "Cinemeta",
-            version = "3.0.0"
+            version = "3.0.0",
         )
-        
+
         addonManager.addAddon("https://duplicate.com", testManifest)
         runCurrent()
-        
+
         val addons = addonManager.installedAddons.value
         assertEquals(1, addons.size) // Still just 1
     }

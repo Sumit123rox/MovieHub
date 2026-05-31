@@ -1,6 +1,5 @@
 package com.moviehub.core.database
 
-import androidx.room3.RoomDatabase
 import androidx.room3.util.getColumnIndexOrThrow
 import androidx.room3.util.performSuspending
 
@@ -12,12 +11,12 @@ interface MediaFtsDao {
     suspend fun rebuild()
 }
 
-class MediaFtsDaoImpl(private val db: RoomDatabase) : MediaFtsDao {
+class MediaFtsDaoImpl(private val db: MovieDatabase) : MediaFtsDao {
 
     override suspend fun search(query: String, limit: Int): List<MediaFtsEntity> =
         performSuspending(db, true, false) { connection ->
             val stmt = connection.prepare(
-                "SELECT rowid, mediaId, title, overview FROM media_fts WHERE media_fts MATCH ? || '*' ORDER BY rank LIMIT ?"
+                "SELECT rowid, mediaId, title, overview FROM media_fts WHERE media_fts MATCH ? || '*' ORDER BY rank LIMIT ?",
             )
             try {
                 stmt.bindText(1, query)
@@ -33,8 +32,8 @@ class MediaFtsDaoImpl(private val db: RoomDatabase) : MediaFtsDao {
                             rowId = stmt.getLong(colRowId),
                             mediaId = stmt.getText(colMediaId) ?: "",
                             title = stmt.getText(colTitle) ?: "",
-                            overview = stmt.getText(colOverview)
-                        )
+                            overview = stmt.getText(colOverview),
+                        ),
                     )
                 }
                 result
@@ -46,7 +45,7 @@ class MediaFtsDaoImpl(private val db: RoomDatabase) : MediaFtsDao {
     override suspend fun insert(entity: MediaFtsEntity) {
         performSuspending(db, false, true) { connection ->
             val stmt = connection.prepare(
-                "INSERT OR REPLACE INTO media_fts(rowid, mediaId, title, overview) VALUES (?, ?, ?, ?)"
+                "INSERT OR REPLACE INTO media_fts(rowid, mediaId, title, overview) VALUES (?, ?, ?, ?)",
             )
             try {
                 stmt.bindLong(1, entity.rowId)

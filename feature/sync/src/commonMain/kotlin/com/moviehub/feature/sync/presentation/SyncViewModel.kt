@@ -6,7 +6,7 @@ import com.moviehub.feature.sync.SyncState
 import kotlinx.coroutines.flow.StateFlow
 
 class SyncViewModel(
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
 ) : ViewModel() {
 
     val syncState: StateFlow<SyncState> = syncManager.syncState

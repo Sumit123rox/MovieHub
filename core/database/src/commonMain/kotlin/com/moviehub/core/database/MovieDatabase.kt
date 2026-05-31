@@ -17,10 +17,11 @@ import androidx.room3.TypeConverters
         StremioCacheEntity::class,
         ProfileEntity::class,
         DownloadEntity::class,
-        MediaFtsEntity::class
+        CustomCollectionEntity::class,
+        CollectionItemEntity::class,
     ],
-    version = 9,
-    exportSchema = true
+    version = 12,
+    exportSchema = true,
 )
 @TypeConverters(Converters::class)
 @ConstructedBy(MovieDatabaseConstructor::class)
@@ -34,6 +35,7 @@ abstract class MovieDatabase : RoomDatabase() {
     abstract fun stremioCacheDao(): StremioCacheDao
     abstract fun profileDao(): ProfileDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun customCollectionDao(): CustomCollectionDao
 }
 
 expect object MovieDatabaseConstructor : RoomDatabaseConstructor<MovieDatabase>

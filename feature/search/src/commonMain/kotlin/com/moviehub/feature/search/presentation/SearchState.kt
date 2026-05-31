@@ -1,7 +1,7 @@
 package com.moviehub.feature.search.presentation
 
-import com.moviehub.core.model.MediaItem
 import androidx.compose.runtime.Immutable
+import com.moviehub.core.model.MediaItem
 
 @Immutable
 data class SearchState(
@@ -9,7 +9,7 @@ data class SearchState(
     val isLoading: Boolean = false,
     val results: List<MediaItem> = emptyList(),
     val recentSearches: List<String> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
 )
 
 sealed interface SearchAction {

@@ -18,3 +18,7 @@ expect fun rememberSystemBrightness(): Float
 internal expect fun playerTimeMillis(): Long
 
 expect val isIosPlatform: Boolean
+
+/** Returns true if the app is currently displaying in Picture-in-Picture mode. */
+@Composable
+expect fun rememberIsInPipMode(): Boolean

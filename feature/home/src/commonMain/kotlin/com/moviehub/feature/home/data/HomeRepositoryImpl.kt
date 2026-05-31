@@ -4,8 +4,8 @@ import co.touchlab.kermit.Logger
 import com.moviehub.core.database.CacheService
 import com.moviehub.core.model.CatalogResponse
 import com.moviehub.core.model.MediaItem
-import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.AddonManager
+import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.mapper.toDomain
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -35,18 +35,27 @@ class HomeRepositoryImpl(
      */
     override suspend fun getCatalog(type: String, catalogId: String, addonId: String?, skip: Int): List<MediaItem> = supervisorScope {
         val allAddons = addonManager.installedAddons.value
+        val originalId = catalogId.removePrefix("merged_")
+        val originalCatalog = allAddons.flatMap { it.catalogs }.firstOrNull {
+            it.type.lowercase() == type.lowercase() && it.id.lowercase() == originalId.lowercase()
+        }
+        val originalName = originalCatalog?.name
 
-        val capableAddons = if (addonId != null) {
+        val capableAddons = if (addonId != null && addonId != "multi_addons") {
             allAddons.filter { it.id == addonId }
         } else {
             allAddons.filter { manifest ->
                 val matchesType = manifest.types.isEmpty() ||
-                                 manifest.types.any { it.lowercase() == type.lowercase() } ||
-                                 (type == "series" && manifest.types.any { it.lowercase() in listOf("show", "tv") })
+                    manifest.types.any { it.lowercase() == type.lowercase() } ||
+                    (type == "series" && manifest.types.any { it.lowercase() in listOf("show", "tv") })
 
-                val hasCatalog = manifest.catalogs.any {
-                    it.type.lowercase() == type.lowercase() &&
-                    (it.id.lowercase() == catalogId.lowercase() || catalogId == "top")
+                val hasCatalog = manifest.catalogs.any { catalog ->
+                    catalog.type.lowercase() == type.lowercase() && (
+                        catalog.id.lowercase() == originalId.lowercase() ||
+                        catalog.id.lowercase() == catalogId.lowercase() ||
+                        (originalName != null && catalog.name?.lowercase() == originalName.lowercase()) ||
+                        originalId == "top"
+                    )
                 }
 
                 matchesType && (hasCatalog || manifest.catalogs.isNotEmpty())
@@ -64,8 +73,11 @@ class HomeRepositoryImpl(
                     val extra = if (skip > 0) mapOf("skip" to skip.toString()) else emptyMap()
 
                     val actualCatalogId = manifest.catalogs.firstOrNull {
-                        it.type.lowercase() == type.lowercase() && it.id.lowercase() == catalogId.lowercase()
-                    }?.id ?: manifest.catalogs.firstOrNull { it.type.lowercase() == type.lowercase() }?.id ?: catalogId
+                        it.type.lowercase() == type.lowercase() && (
+                            it.id.lowercase() == originalId.lowercase() ||
+                            (originalName != null && it.name?.lowercase() == originalName.lowercase())
+                        )
+                    }?.id ?: manifest.catalogs.firstOrNull { it.type.lowercase() == type.lowercase() }?.id ?: originalId
 
                     val cacheKey = CacheService.catalogKey(type, actualCatalogId, manifest.id, skip)
 
@@ -75,7 +87,7 @@ class HomeRepositoryImpl(
                             baseUrl = url,
                             type = type,
                             id = actualCatalogId,
-                            extra = extra
+                            extra = extra,
                         )
                         if (response != null) {
                             cacheService.putCache(cacheKey, "catalog", json.encodeToString(CatalogResponse.serializer(), response))
@@ -88,7 +100,7 @@ class HomeRepositoryImpl(
                     // 2. Fallback to cache
                     val cached = cacheService.getCachedCatalogParsed(cacheKey, CatalogResponse.serializer())
                     if (cached != null) {
-                        logger.i { "Using cached catalog for ${manifest.id}/${actualCatalogId}" }
+                        logger.i { "Using cached catalog for ${manifest.id}/$actualCatalogId" }
                         return@async cached.metas.toDomain(addonId = manifest.id, addonUrl = url)
                     }
 
@@ -100,7 +112,27 @@ class HomeRepositoryImpl(
             }
         }
 
-        val result = deferredItems.awaitAll().flatten().distinctBy { it.id }
+        val fetchedLists = deferredItems.awaitAll()
+        val result = if (addonId == "multi_addons" || catalogId.startsWith("merged_")) {
+            val interleaved = mutableListOf<MediaItem>()
+            var index = 0
+            while (true) {
+                var addedAny = false
+                capableAddons.forEachIndexed { addonIdx, _ ->
+                    val itemsFromAddon = fetchedLists[addonIdx]
+                    if (index < itemsFromAddon.size) {
+                        interleaved.add(itemsFromAddon[index])
+                        addedAny = true
+                    }
+                }
+                if (!addedAny) break
+                index++
+            }
+            interleaved.distinctBy { it.id }
+        } else {
+            fetchedLists.flatten().distinctBy { it.id }
+        }
+
         logger.i { "HomeRepository: Fetched ${result.size} items for $type/$catalogId (skip=$skip)" }
         result
     }
@@ -112,7 +144,7 @@ class HomeRepositoryImpl(
     override suspend fun getCachedCatalogs(
         addons: List<com.moviehub.core.model.StremioManifest>,
         type: String,
-        catalogId: String
+        catalogId: String,
     ): List<MediaItem> = supervisorScope {
         addons.map { manifest ->
             async {
@@ -144,7 +176,7 @@ class HomeRepositoryImpl(
         type: String,
         catalogId: String,
         addonId: String?,
-        skip: Int
+        skip: Int,
     ): List<MediaItem> = supervisorScope {
         val allAddons = addonManager.installedAddons.value
 
@@ -153,12 +185,12 @@ class HomeRepositoryImpl(
         } else {
             allAddons.filter { manifest ->
                 val matchesType = manifest.types.isEmpty() ||
-                                 manifest.types.any { it.lowercase() == type.lowercase() } ||
-                                 (type == "series" && manifest.types.any { it.lowercase() in listOf("show", "tv") })
+                    manifest.types.any { it.lowercase() == type.lowercase() } ||
+                    (type == "series" && manifest.types.any { it.lowercase() in listOf("show", "tv") })
 
                 val hasCatalog = manifest.catalogs.any {
                     it.type.lowercase() == type.lowercase() &&
-                    (it.id.lowercase() == catalogId.lowercase() || catalogId == "top")
+                        (it.id.lowercase() == catalogId.lowercase() || catalogId == "top")
                 }
 
                 matchesType && (hasCatalog || manifest.catalogs.isNotEmpty())
@@ -189,7 +221,7 @@ class HomeRepositoryImpl(
                         emptyList()
                     }
                 } catch (e: Exception) {
-                    logger.e(e) { "Network refresh failed for ${manifest.id}/${catalogId}" }
+                    logger.e(e) { "Network refresh failed for ${manifest.id}/$catalogId" }
                     emptyList()
                 }
             }

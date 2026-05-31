@@ -5,23 +5,23 @@ import androidx.lifecycle.viewModelScope
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.model.Profile
 import com.moviehub.core.network.AddonManager
+import com.moviehub.core.utils.PerformanceMonitor
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.moviehub.core.utils.PerformanceMonitor
 
 data class ProfileUiState(
     val profiles: List<Profile> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
 )
 
 class ProfileViewModel(
     private val profileRepository: ProfileRepository,
-    private val addonManager: AddonManager
+    private val addonManager: AddonManager,
 ) : ViewModel() {
 
     val uiState: StateFlow<ProfileUiState> = profileRepository.profiles
@@ -34,7 +34,7 @@ class ProfileViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = ProfileUiState(isLoading = true)
+            initialValue = ProfileUiState(isLoading = true),
         )
 
     val activeProfile: StateFlow<Profile?> = profileRepository.activeProfile

@@ -4,13 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.WatchProgressDao
+import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.feature.home.data.HomeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import com.moviehub.core.utils.PerformanceMonitor
 
 class CatalogViewModel(
     private val repository: HomeRepository,
@@ -61,12 +61,12 @@ class CatalogViewModel(
                     _state.value = _state.value.copy(
                         isLoading = false,
                         displayedItems = fetched.take(pageSize),
-                        canPaginate = fetched.isNotEmpty()
+                        canPaginate = fetched.isNotEmpty(),
                     )
                 } catch (e: Exception) {
                     _state.value = _state.value.copy(
                         isLoading = false,
-                        error = e.message ?: "Failed to load catalog"
+                        error = e.message ?: "Failed to load catalog",
                     )
                 }
             } finally {
@@ -88,7 +88,7 @@ class CatalogViewModel(
                     val nextSize = (_state.value.displayedItems.size + pageSize).coerceAtMost(allFetchedItems.size)
                     _state.value = _state.value.copy(
                         displayedItems = allFetchedItems.take(nextSize),
-                        isPaginating = false
+                        isPaginating = false,
                     )
                 } else {
                     val nextSkip = allFetchedItems.size
@@ -102,12 +102,12 @@ class CatalogViewModel(
                         val nextSize = _state.value.displayedItems.size + pageSize
                         _state.value = _state.value.copy(
                             displayedItems = allFetchedItems.take(nextSize),
-                            isPaginating = false
+                            isPaginating = false,
                         )
                     } else {
                         _state.value = _state.value.copy(
                             canPaginate = false,
-                            isPaginating = false
+                            isPaginating = false,
                         )
                     }
                 }
@@ -115,7 +115,7 @@ class CatalogViewModel(
                 _state.value = _state.value.copy(
                     isPaginating = false,
                     canPaginate = false,
-                    error = e.message ?: "Failed to load more items"
+                    error = e.message ?: "Failed to load more items",
                 )
             } finally {
                 PerformanceMonitor.endSection()

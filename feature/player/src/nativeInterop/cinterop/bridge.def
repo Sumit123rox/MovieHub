@@ -1,0 +1,4 @@
+language = Objective-C
+headers = MpvPlayerBridge.h
+headerFilter = MpvPlayerBridge.h
+package = mpvbridge

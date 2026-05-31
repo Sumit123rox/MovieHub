@@ -22,9 +22,13 @@ interface MoviePlayer {
 
     fun selectSubtitleTrack(trackIndex: Int)
 
+    fun selectVideoTrack(trackIndex: Int)
+
     fun setVideoScale(scale: VideoScale)
 
     fun setSubtitleStyle(style: SubtitleStyle)
+
+    fun enterPip() {}
 
     fun release()
 }

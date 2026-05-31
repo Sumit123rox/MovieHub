@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 
 data class PluginsUiStateWrapper(
     val repoUrlInput: String = "",
-    val coreState: PluginsUiState = PluginsUiState()
+    val coreState: PluginsUiState = PluginsUiState(),
 )
 
 sealed interface PluginsAction {
@@ -28,23 +28,23 @@ sealed interface PluginsAction {
 }
 
 class PluginsViewModel(
-    private val pluginRepository: PluginRepository
+    private val pluginRepository: PluginRepository,
 ) : ViewModel() {
 
     private val _repoUrlInput = MutableStateFlow("")
 
     val state: StateFlow<PluginsUiStateWrapper> = combine(
         _repoUrlInput,
-        pluginRepository.uiState
+        pluginRepository.uiState,
     ) { input, core ->
         PluginsUiStateWrapper(
             repoUrlInput = input,
-            coreState = core
+            coreState = core,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = PluginsUiStateWrapper()
+        initialValue = PluginsUiStateWrapper(),
     )
 
     init {

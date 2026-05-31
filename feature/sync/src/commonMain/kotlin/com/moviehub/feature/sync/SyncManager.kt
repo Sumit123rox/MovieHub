@@ -31,7 +31,7 @@ data class SyncState(
     val isSyncing: Boolean = false,
     val lastSyncTime: Long? = null,
     val lastSyncError: String? = null,
-    val itemsSynced: Int = 0
+    val itemsSynced: Int = 0,
 )
 
 class SyncManager(
@@ -47,9 +47,11 @@ class SyncManager(
     private val userPreferencesDao: UserPreferencesDao,
     private val watchProgressDao: WatchProgressDao,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
-        Logger.withTag("SyncManager").e(e) { "Unhandled coroutine exception" }
-    })
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
+            Logger.withTag("SyncManager").e(e) { "Unhandled coroutine exception" }
+        },
+    )
 
     private val _syncState = MutableStateFlow(SyncState())
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
@@ -133,7 +135,7 @@ class SyncManager(
             _syncState.value = _syncState.value.copy(
                 isSyncing = false,
                 lastSyncTime = currentTimeMillis(),
-                itemsSynced = synced
+                itemsSynced = synced,
             )
             log.i { "Sync complete for profile ${profile.id}: $synced items" }
         } catch (e: CancellationException) {
@@ -142,7 +144,7 @@ class SyncManager(
             log.e(e) { "Sync failed for profile ${profile.id}" }
             _syncState.value = _syncState.value.copy(
                 isSyncing = false,
-                lastSyncError = e.message ?: "Unknown sync error"
+                lastSyncError = e.message ?: "Unknown sync error",
             )
         }
     }
@@ -155,14 +157,19 @@ class SyncManager(
                 filter { eq("profile_id", profile.id) }
             }.decodeList()
             remote.forEach { fav ->
+                val contentType = when (fav.content_type.uppercase()) {
+                    "MOVIE" -> com.moviehub.core.database.ContentType.MOVIE
+                    "SHOW", "SERIES", "TV" -> com.moviehub.core.database.ContentType.SHOW
+                    else -> com.moviehub.core.database.ContentType.MOVIE
+                }
                 favoriteDao.insertFavorite(
                     FavoriteEntity(
                         contentId = fav.content_id,
                         profileId = fav.profile_id,
-                        contentType = com.moviehub.core.database.ContentType.MOVIE,
+                        contentType = contentType,
                         title = fav.title,
-                        posterUrl = fav.poster_url
-                    )
+                        posterUrl = fav.poster_url,
+                    ),
                 )
             }
             remote.size
@@ -184,8 +191,8 @@ class SyncManager(
                         title = "",
                         type = wh.type,
                         posterPath = null,
-                        lastWatchedAt = wh.updated_at
-                    )
+                        lastWatchedAt = wh.updated_at,
+                    ),
                 )
             }
             remote.size
@@ -207,8 +214,8 @@ class SyncManager(
                         type = wp.type,
                         progressMs = wp.progress_ms,
                         durationMs = wp.duration_ms,
-                        isWatched = wp.is_watched
-                    )
+                        isWatched = wp.is_watched,
+                    ),
                 )
             }
             remote.size
@@ -230,8 +237,8 @@ class SyncManager(
                             id = remoteAddon.id,
                             profileId = remoteAddon.profile_id,
                             url = remoteAddon.manifest_url,
-                            manifest = ""
-                        )
+                            manifest = "",
+                        ),
                     )
                 }
             }
@@ -251,8 +258,8 @@ class SyncManager(
                     UserPreferencesEntity(
                         profileId = pref.profile_id,
                         theme = pref.theme,
-                        accentColor = pref.accent_color
-                    )
+                        accentColor = pref.accent_color,
+                    ),
                 )
             }
             remote.size
@@ -273,7 +280,7 @@ class SyncManager(
                     profile_id = fav.profileId,
                     content_type = fav.contentType.name,
                     title = fav.title,
-                    poster_url = fav.posterUrl
+                    poster_url = fav.posterUrl,
                 )
             }
             supabase.from("favorites").upsert(payload)
@@ -295,7 +302,7 @@ class SyncManager(
                     progress_ms = 0,
                     duration_ms = 0,
                     is_watched = true,
-                    updated_at = wh.lastWatchedAt
+                    updated_at = wh.lastWatchedAt,
                 )
             }
             supabase.from("watch_history").upsert(payload)
@@ -316,7 +323,7 @@ class SyncManager(
                     type = wp.type,
                     progress_ms = wp.progressMs,
                     duration_ms = wp.durationMs,
-                    is_watched = wp.isWatched
+                    is_watched = wp.isWatched,
                 )
             }
             supabase.from("watch_progress").upsert(payload)
@@ -336,7 +343,7 @@ class SyncManager(
                     profile_id = addon.profileId,
                     name = addon.id,
                     version = "1.0",
-                    manifest_url = addon.url
+                    manifest_url = addon.url,
                 )
             }
             supabase.from("addons").upsert(payload)
@@ -352,7 +359,7 @@ class SyncManager(
             val payload = SupabasePreference(
                 profile_id = local.profileId,
                 theme = local.theme,
-                accent_color = local.accentColor
+                accent_color = local.accentColor,
             )
             supabase.from("user_preferences").upsert(payload)
             1

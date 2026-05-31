@@ -7,14 +7,35 @@ plugins {
 
 kotlin {
     androidTarget()
-    
+
+    // ── iOS cinterop for MpvPlayerBridge ──
+    // Resolves the Objective-C header so Kotlin/Native can call into the Swift mpv bridge.
+    // Requires Xcode with iOS SDK to be installed (xcrun --sdk iphonesimulator --show-sdk-path).
+    val mpvBridgeDef = project.file("src/nativeInterop/cinterop/bridge.def")
+
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "player"
             isStatic = true
+        }
+        iosTarget.compilations.getByName("main") {
+            val cinterop by cinterops.creating {
+                defFile(mpvBridgeDef)
+                packageName("mpvbridge")
+                // Point clang at the iOS SDK so UIKit/UIKit.h is found
+                val sdkPath =
+                    when {
+                        iosTarget.name.contains("simulator", ignoreCase = true) ->
+                            "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk"
+                        else ->
+                            "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
+                    }
+                val headerDir = project.file("src/nativeInterop/cinterop").absolutePath
+                compilerOpts("-isysroot", sdkPath, "-I$headerDir")
+            }
         }
     }
 
@@ -22,8 +43,10 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":core:ui"))
             implementation(project(":core:model"))
+            implementation(project(":core:player-api"))
             implementation(project(":core:database"))
             implementation(project(":core:network"))
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)

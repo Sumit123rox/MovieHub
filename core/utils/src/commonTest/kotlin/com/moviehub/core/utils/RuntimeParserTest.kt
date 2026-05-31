@@ -63,7 +63,7 @@ class RuntimeParserTest {
 
     @Test
     fun `handles various spacing`() {
-        assertEquals(7_980_000, parseRuntime("2h13m"))  // no space
+        assertEquals(7_980_000, parseRuntime("2h13m")) // no space
         assertEquals(7_800_000, parseRuntime("2hr10min")) // no space, hr/min
     }
 

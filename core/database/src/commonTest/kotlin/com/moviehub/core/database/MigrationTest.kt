@@ -3,7 +3,6 @@ package com.moviehub.core.database
 import androidx.room3.Room
 import androidx.room3.util.performSuspending
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import androidx.sqlite.execSQL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -18,7 +17,7 @@ class MigrationTest {
 
     private fun createTestDatabase(): MovieDatabase {
         return Room.inMemoryDatabaseBuilder<MovieDatabase>(
-            factory = MovieDatabaseConstructor::initialize
+            factory = MovieDatabaseConstructor::initialize,
         )
             .setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
@@ -39,7 +38,7 @@ class MigrationTest {
         try {
             val tables = performSuspending(db, true, false) { conn ->
                 val stmt = conn.prepare(
-                    "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+                    "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
                 )
                 val names = mutableListOf<String>()
                 try {
@@ -73,7 +72,7 @@ class MigrationTest {
         try {
             val exists = performSuspending(db, true, false) { conn ->
                 val stmt = conn.prepare(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='media_fts'"
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='media_fts'",
                 )
                 try {
                     stmt.step()

@@ -4,8 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,7 +27,7 @@ fun DetailAdditionalInfoSection(
 ) {
     val isSeriesLike = media.type == MediaType.SHOW || media.videos.any { it.season != null || it.episode != null }
     val title = if (isSeriesLike) "Show Details" else "Movie Details"
-    
+
     val rows = buildList {
         media.status?.let { add("Status" to it) }
         media.releaseInfo?.let { add("Release Info" to it) }
@@ -36,7 +36,7 @@ fun DetailAdditionalInfoSection(
         media.country?.let { add("Origin Country" to it) }
         media.language?.let { add("Original Language" to it.uppercase()) }
     }
-    
+
     if (rows.isEmpty()) return
 
     DetailSection(

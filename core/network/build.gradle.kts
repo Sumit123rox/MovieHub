@@ -6,17 +6,11 @@ plugins {
 
 kotlin {
     androidTarget()
-    
+
     listOf(iosArm64(), iosSimulatorArm64()).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "core-network"
             isStatic = true
-        }
-        iosTarget.compilations.getByName("main").cinterops {
-            create("CommonCrypto") {
-                defFile(project.file("src/nativeInterop/cinterop/CommonCrypto.def"))
-                packageName("com.moviehub.core.network.commoncrypto")
-            }
         }
     }
 

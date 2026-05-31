@@ -8,5 +8,5 @@ data class StremioCacheEntity(
     @PrimaryKey val id: String,
     val type: String,
     val jsonData: String,
-    val cachedAt: Long = 0L
+    val cachedAt: Long = 0L,
 )

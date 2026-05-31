@@ -21,14 +21,14 @@ actual fun CastButton(modifier: Modifier) {
             runCatching {
                 val ctx = ContextThemeWrapper(
                     context.applicationContext,
-                    android.R.style.Theme_DeviceDefault
+                    android.R.style.Theme_DeviceDefault,
                 )
                 MediaRouteButton(ctx).apply {
                     routeSelector = MediaRouteSelector.Builder()
                         .addControlCategory(
                             CastMediaControlIntent.categoryForCast(
-                                CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID
-                            )
+                                CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID,
+                            ),
                         )
                         .build()
                 }
@@ -37,6 +37,6 @@ actual fun CastButton(modifier: Modifier) {
                 it.layoutParams = ViewGroup.LayoutParams(1, 1)
             }
         },
-        modifier = modifier
+        modifier = modifier,
     )
 }

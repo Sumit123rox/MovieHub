@@ -10,10 +10,17 @@ expect class PlatformDownloader(ctx: PlatformContext) {
     fun resume(taskId: String)
     fun cancel(taskId: String)
     fun getProgress(taskId: String): Flow<DownloadProgress>
+    fun getStorageInfo(): StorageInfo
 }
 
 data class DownloadProgress(
     val downloadedSize: Long,
     val totalSize: Long,
-    val progress: Float
+    val progress: Float,
+)
+
+data class StorageInfo(
+    val totalBytes: Long,
+    val freeBytes: Long,
+    val appBytes: Long,
 )

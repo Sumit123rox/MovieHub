@@ -13,4 +13,6 @@ data class UserPreferencesEntity(
     val tmdbApiKey: String = "",
     val debridApiKey: String = "",
     val seekIncrement: Int = 10,
+    val subtitleStyleJson: String = "", // Serialized SubtitleStyle
+    val playbackPreferencesJson: String = "", // {"defaultSpeed":1.0,"autoPlayNext":true,"resumePlayback":true}
 )

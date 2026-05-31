@@ -5,10 +5,10 @@ import com.moviehub.core.utils.currentTimeMillis
 
 @Entity(
     tableName = "search_history",
-    primaryKeys = ["query", "profileId"]
+    primaryKeys = ["query", "profileId"],
 )
 data class SearchHistoryEntity(
     val query: String,
     val profileId: String,
-    val timestamp: Long = currentTimeMillis()
+    val timestamp: Long = currentTimeMillis(),
 )

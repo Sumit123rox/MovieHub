@@ -7,10 +7,10 @@ plugins {
 
 kotlin {
     androidTarget()
-    
+
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "details"
@@ -25,6 +25,7 @@ kotlin {
             implementation(project(":core:network"))
             implementation(project(":core:database"))
             implementation(project(":core:utils"))
+            implementation(project(":core:player-api"))
             implementation(project(":feature:player"))
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.compose)

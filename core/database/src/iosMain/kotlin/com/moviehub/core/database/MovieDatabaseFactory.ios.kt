@@ -16,12 +16,12 @@ actual class MovieDatabaseFactory actual constructor(private val ctx: PlatformCo
             inDomain = NSUserDomainMask,
             appropriateForURL = null,
             create = false,
-            error = null
+            error = null,
         )
         val dbPath = documentDirectory?.path?.let { "$it/moviehub.db" } ?: "moviehub.db"
         return Room.databaseBuilder<MovieDatabase>(
             name = dbPath,
-            factory = MovieDatabaseConstructor::initialize
+            factory = MovieDatabaseConstructor::initialize,
         )
             .configureDatabase()
             .build()

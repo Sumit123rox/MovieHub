@@ -2,7 +2,6 @@ package com.moviehub.feature.details.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -107,9 +106,12 @@ private fun ProductionChip(
             .background(color = chipColor)
             .border(
                 width = 1.dp,
-                color = if (hasLogo) Color.Black.copy(alpha = 0.08f)
-                       else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(12.dp)
+                color = if (hasLogo) {
+                    Color.Black.copy(alpha = 0.08f)
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                },
+                shape = RoundedCornerShape(12.dp),
             )
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .height(chipHeight),
@@ -123,7 +125,7 @@ private fun ProductionChip(
                     .width(logoWidth)
                     .height(logoHeight),
                 contentScale = ContentScale.Fit,
-                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
+                onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) },
             )
         } else {
             Text(

@@ -11,7 +11,7 @@ data class ProfileEntity(
     val avatarUrl: String?,
     val pin: String?,
     val isChild: Boolean,
-    val createdAt: Long
+    val createdAt: Long,
 )
 
 fun ProfileEntity.toExternalModel() = Profile(
@@ -20,7 +20,7 @@ fun ProfileEntity.toExternalModel() = Profile(
     avatarUrl = avatarUrl,
     pin = pin,
     isChild = isChild,
-    createdAt = createdAt
+    createdAt = createdAt,
 )
 
 fun Profile.toEntity() = ProfileEntity(
@@ -29,5 +29,5 @@ fun Profile.toEntity() = ProfileEntity(
     avatarUrl = avatarUrl,
     pin = pin,
     isChild = isChild,
-    createdAt = createdAt
+    createdAt = createdAt,
 )

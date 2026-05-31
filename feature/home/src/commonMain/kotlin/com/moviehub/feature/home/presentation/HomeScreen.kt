@@ -1,12 +1,13 @@
 package com.moviehub.feature.home.presentation
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -39,13 +40,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,10 +71,14 @@ import androidx.compose.ui.unit.sp
 import com.moviehub.core.model.ContinueWatchingItem
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.MediaItemStore
+import com.moviehub.core.model.MediaType
 import com.moviehub.core.ui.components.ContentCard
+import com.moviehub.core.ui.components.EmptyState
 import com.moviehub.core.ui.components.HeroCarousel
 import com.moviehub.core.ui.components.Poster
+import com.moviehub.core.ui.components.SmartStatusBar
 import com.moviehub.core.ui.components.shimmerEffect
+import com.moviehub.core.ui.theme.MovieHubDimens
 import kotlinx.coroutines.delay
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Duration.Companion.milliseconds
@@ -85,7 +90,7 @@ fun HomeScreen(
     onSeeAllClick: (title: String, type: String, catalogId: String, addonId: String?) -> Unit,
     onAddonsClick: () -> Unit,
     onResumeClick: (mediaId: String, type: String) -> Unit,
-    viewModel: HomeViewModel = koinViewModel()
+    viewModel: HomeViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     var onboardingDismissed by rememberSaveable { mutableStateOf(false) }
@@ -95,8 +100,9 @@ fun HomeScreen(
     // Detect when user scrolls near the bottom to trigger lazy loading
     val shouldLoadMore by remember {
         derivedStateOf {
-            if (!state.hasMoreSections || state.isLoadingMore) false
-            else {
+            if (!state.hasMoreSections || state.isLoadingMore) {
+                false
+            } else {
                 val layoutInfo = listState.layoutInfo
                 val totalItems = layoutInfo.totalItemsCount
                 val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -112,21 +118,42 @@ fun HomeScreen(
         }
     }
 
+    SmartStatusBar(
+        isDark = true,
+        color = MaterialTheme.colorScheme.background,
+    )
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         PullToRefreshBox(
-            isRefreshing = state.isLoading && state.installedAddons.isNotEmpty(),
+            isRefreshing = state.isRefreshing,
             onRefresh = { viewModel.onAction(HomeAction.Refresh) },
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .padding(paddingValues)
+                .padding(paddingValues),
         ) {
+            // Dynamic Aurora-gradient backdrop overlay for premium Gen-Z visual weight
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MovieHubDimens.Shimmer.heroHeight)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.04f),
+                                Color.Transparent,
+                            )
+                        )
+                    )
+            )
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                state = listState
+                state = listState,
             ) {
                 // Dismissable onboarding banner — only when no addons are installed
                 if (state.installedAddons.isEmpty() && !state.isLoading && !onboardingDismissed) {
@@ -134,30 +161,30 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .padding(MovieHubDimens.Spacing.lg),
                         ) {
                             ContentCard(modifier = Modifier.fillMaxWidth()) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(20.dp),
+                                        .padding(MovieHubDimens.Spacing.xl),
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(56.dp)
+                                            .size(MovieHubDimens.Avatar.lg)
                                             .background(
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                                shape = RoundedCornerShape(14.dp)
+                                                shape = RoundedCornerShape(MovieHubDimens.Spacing.ml),
                                             ),
-                                        contentAlignment = Alignment.Center
+                                        contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Extension,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(28.dp)
+                                            modifier = Modifier.size(MovieHubDimens.Icon.xl),
                                         )
                                     }
 
@@ -166,7 +193,7 @@ fun HomeScreen(
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        textAlign = TextAlign.Center
+                                        textAlign = TextAlign.Center,
                                     )
 
                                     Text(
@@ -174,7 +201,7 @@ fun HomeScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                         textAlign = TextAlign.Center,
-                                        lineHeight = 18.sp
+                                        lineHeight = MovieHubDimens.Font.xxl,
                                     )
 
                                     Row(
@@ -182,23 +209,23 @@ fun HomeScreen(
                                             .fillMaxWidth()
                                             .background(
                                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
-                                                shape = RoundedCornerShape(6.dp)
+                                                shape = RoundedCornerShape(MovieHubDimens.Spacing.xs),
                                             )
-                                            .padding(10.dp),
+                                            .padding(MovieHubDimens.Spacing.ms),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Info,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                            modifier = Modifier.size(14.dp)
+                                            modifier = Modifier.size(MovieHubDimens.Spacing.ml),
                                         )
                                         Text(
                                             text = "Supports Stremio HTTP Addons & JS Plugins",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
                                         )
                                     }
 
@@ -206,17 +233,17 @@ fun HomeScreen(
                                         onClick = onAddonsClick,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
                                         ),
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(MovieHubDimens.Spacing.sm),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(44.dp)
+                                            .height(MovieHubDimens.Player.sideSliderWidth),
                                     ) {
                                         Text(
                                             text = "Configure External Providers",
                                             fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.5.sp
+                                            letterSpacing = 0.5.sp,
                                         )
                                     }
                                 }
@@ -227,14 +254,14 @@ fun HomeScreen(
                                 onClick = { onboardingDismissed = true },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .size(32.dp)
-                                    .padding(4.dp)
+                                    .size(MovieHubDimens.Spacing.xxxl)
+                                    .padding(MovieHubDimens.Spacing.xxs),
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Dismiss",
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(MovieHubDimens.Player.seekBarThumb),
                                 )
                             }
                         }
@@ -252,9 +279,9 @@ fun HomeScreen(
                                     onMediaClick(
                                         movie.id,
                                         movie.type.stremioType,
-                                        movie.sourceAddonUrl
+                                        movie.sourceAddonUrl,
                                     )
-                                }
+                                },
                             )
                         }
                     }
@@ -266,36 +293,36 @@ fun HomeScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(450.dp)
-                                    .padding(bottom = 24.dp)
-                                    .shimmerEffect()
+                                    .height(MovieHubDimens.Shimmer.heroHeight)
+                                    .padding(bottom = MovieHubDimens.Spacing.xxl)
+                                    .shimmerEffect(),
                             )
                         } else {
                             // Category Row Shimmer
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 16.dp, horizontal = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .padding(vertical = MovieHubDimens.Spacing.lg, horizontal = MovieHubDimens.Spacing.lg),
+                                verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .width(140.dp)
-                                        .height(22.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .shimmerEffect()
+                                        .width(MovieHubDimens.Shimmer.titleWidth)
+                                        .height(MovieHubDimens.Icon.md)
+                                        .clip(RoundedCornerShape(MovieHubDimens.Spacing.xxs))
+                                        .shimmerEffect(),
                                 )
                                 LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     items(5) {
                                         Box(
                                             modifier = Modifier
-                                                .width(130.dp)
-                                                .height(190.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .shimmerEffect()
+                                                .width(MovieHubDimens.Shimmer.cardWidth)
+                                                .height(MovieHubDimens.Shimmer.cardHeight)
+                                                .clip(RoundedCornerShape(MovieHubDimens.Spacing.sm))
+                                                .shimmerEffect(),
                                         )
                                     }
                                 }
@@ -324,7 +351,7 @@ fun HomeScreen(
                                 },
                                 onRemoveFromContinue = { item ->
                                     viewModel.onAction(HomeAction.RemoveFromContinue(item.mediaId))
-                                }
+                                },
                             )
                         }
                     }
@@ -336,7 +363,7 @@ fun HomeScreen(
                         CategoryFilterBar(
                             selectedType = selectedCategoryType,
                             onTypeSelected = { selectedCategoryType = it },
-                            sections = state.dynamicSections
+                            sections = state.dynamicSections,
                         )
                     }
                 }
@@ -344,10 +371,12 @@ fun HomeScreen(
                 // Dynamic Catalog Sections (filtered by selected category type)
                 val displaySections = if (selectedCategoryType != null) {
                     state.dynamicSections.filter { it.type == selectedCategoryType }
-                } else state.dynamicSections
+                } else {
+                    state.dynamicSections
+                }
                 items(
                     items = displaySections,
-                    key = { "${it.addonId}_${it.catalogId}_${it.type}" }
+                    key = { "${it.addonId}_${it.catalogId}_${it.type}" },
                 ) { section ->
                     AnimatedEntry(index = 2) {
                         HomeSection(
@@ -360,7 +389,7 @@ fun HomeScreen(
                                     section.catalogName,
                                     section.type,
                                     section.catalogId,
-                                    section.addonId
+                                    section.addonId,
                                 )
                             },
                             onItemClick = { id, type, addonUrl ->
@@ -370,7 +399,10 @@ fun HomeScreen(
                                     .firstOrNull { it.id == id }
                                     ?.let { MediaItemStore.put(it.id, it) }
                                 onMediaClick(id, type, addonUrl)
-                            }
+                            },
+                            onItemHover = { id, type, addonId ->
+                                viewModel.onAction(HomeAction.PrewarmCatalogItem(id, type, addonId))
+                            },
                         )
                     }
                 }
@@ -381,24 +413,28 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 32.dp, vertical = 48.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(vertical = MovieHubDimens.Icon.xxxl),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = if (state.installedAddons.isEmpty())
-                                    "No catalogs available. Add an external provider to get started."
-                                else
-                                    "This provider does not support catalog browsing. Add a different addon for catalogs.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                textAlign = TextAlign.Center
+                            EmptyState(
+                                icon = Icons.Default.Extension,
+                                title = if (state.installedAddons.isEmpty()) {
+                                    "No catalogs available"
+                                } else {
+                                    "No content available"
+                                },
+                                subtitle = if (state.installedAddons.isEmpty()) {
+                                    "Add an external provider to get started."
+                                } else {
+                                    "This provider does not support catalog browsing. Add a different addon for catalogs."
+                                },
                             )
                         }
                     }
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xxxl))
                 }
 
                 // Lazy loading indicator — shown while more sections are being fetched
@@ -407,22 +443,22 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(MovieHubDimens.Spacing.lg),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
                             ) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
+                                    modifier = Modifier.size(MovieHubDimens.Spacing.lg),
+                                    strokeWidth = MovieHubDimens.Spacing.dp2,
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
                                     text = "Loading more...",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                 )
                             }
                         }
@@ -434,34 +470,34 @@ fun HomeScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 32.dp, bottom = 56.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                                .padding(top = MovieHubDimens.Spacing.xxxl, bottom = MovieHubDimens.Avatar.lg),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             // Decorative divider with sparkle
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .width(48.dp)
-                                        .height(1.dp)
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                                        .width(MovieHubDimens.Icon.xxxl)
+                                        .height(MovieHubDimens.Spacing.dp1)
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
                                 )
                                 Text(
                                     text = "✦",
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    fontSize = MovieHubDimens.Font.xs,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .width(48.dp)
-                                        .height(1.dp)
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                                        .width(MovieHubDimens.Icon.xxxl)
+                                        .height(MovieHubDimens.Spacing.dp1)
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xxl))
 
                             // Main closing message
                             Text(
@@ -469,71 +505,71 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                letterSpacing = 0.3.sp
+                                letterSpacing = 0.3.sp,
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xs))
 
                             Text(
                                 text = "But the journey never ends ✨",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                                letterSpacing = 0.2.sp
+                                letterSpacing = 0.2.sp,
                             )
 
-                            Spacer(modifier = Modifier.height(28.dp))
+                            Spacer(modifier = Modifier.height(MovieHubDimens.Icon.xl))
 
                             // Premium badge-style footer
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(MovieHubDimens.Spacing.lg))
                                     .background(
                                         Brush.linearGradient(
                                             colors = listOf(
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.03f),
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
-                                            )
-                                        )
+                                            ),
+                                        ),
                                     )
                                     .border(
-                                        width = 1.dp,
+                                        width = MovieHubDimens.Spacing.dp1,
                                         brush = Brush.linearGradient(
                                             colors = listOf(
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.04f),
                                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                            )
+                                            ),
                                         ),
-                                        shape = RoundedCornerShape(16.dp)
+                                        shape = RoundedCornerShape(MovieHubDimens.Spacing.lg),
                                     )
-                                    .padding(horizontal = 28.dp, vertical = 18.dp)
+                                    .padding(horizontal = MovieHubDimens.Icon.xl, vertical = MovieHubDimens.Player.seekBarThumb),
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
                                 ) {
-                                    Text(text = "🇮🇳", fontSize = 22.sp)
+                                    Text(text = "🇮🇳", fontSize = MovieHubDimens.Font.headline)
                                     Column {
                                         Text(
                                             text = "Made with love",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                            letterSpacing = 0.3.sp
+                                            letterSpacing = 0.3.sp,
                                         )
                                         Text(
                                             text = "in India",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                            letterSpacing = 1.sp
+                                            letterSpacing = 1.sp,
                                         )
                                     }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(20.dp))
+                            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xl))
 
                             // Closing quote
                             Text(
@@ -541,14 +577,14 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
-                                letterSpacing = 2.sp
+                                letterSpacing = 2.sp,
                             )
                         }
                     }
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.lg))
                 }
             }
         }
@@ -559,7 +595,7 @@ fun HomeScreen(
 private fun AnimatedEntry(
     index: Int = 0,
     modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable BoxScope.() -> Unit,
 ) {
     val alpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -574,7 +610,7 @@ private fun AnimatedEntry(
                 this.scaleX = 0.94f + alpha.value * 0.06f
                 this.scaleY = 0.94f + alpha.value * 0.06f
             },
-        content = content
+        content = content,
     )
 }
 
@@ -583,7 +619,7 @@ private fun CategoryFilterBar(
     selectedType: String?,
     onTypeSelected: (String?) -> Unit,
     sections: List<CatalogSection>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val types = remember(sections) {
         sections.map { it.type }.distinct().sorted()
@@ -595,27 +631,27 @@ private fun CategoryFilterBar(
         "series" to "📺 Series",
         "tv" to "📡 TV",
         "anime" to "🎌 Anime",
-        "channel" to "📡 Channels"
+        "channel" to "📡 Channels",
     )
 
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = MovieHubDimens.Spacing.lg, vertical = MovieHubDimens.Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
     ) {
         item(key = "all") {
             CategoryChip(
                 selected = selectedType == null,
                 label = "✨ All",
-                onClick = { onTypeSelected(null) }
+                onClick = { onTypeSelected(null) },
             )
         }
         items(types, key = { it }) { type ->
             CategoryChip(
                 selected = selectedType == type,
                 label = typeLabels[type] ?: type.replaceFirstChar { it.uppercase() },
-                onClick = { onTypeSelected(type) }
+                onClick = { onTypeSelected(type) },
             )
         }
     }
@@ -626,22 +662,50 @@ private fun CategoryChip(
     selected: Boolean,
     label: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "ChipPressScale"
+    )
+
     Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
-        else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(MovieHubDimens.Spacing.xl),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
         modifier = modifier
+            .graphicsLayer(scaleX = scale, scaleY = scale)
+            .clip(RoundedCornerShape(MovieHubDimens.Spacing.xl))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .border(
+                width = MovieHubDimens.Spacing.dp1,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                shape = RoundedCornerShape(MovieHubDimens.Spacing.xl)
+            )
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = MovieHubDimens.Spacing.lg, vertical = MovieHubDimens.Spacing.ms),
         )
     }
 }
@@ -654,17 +718,17 @@ fun ContinueWatchingSection(
     onDetailsClick: (ContinueWatchingItem) -> Unit,
     onMarkAsWatched: (ContinueWatchingItem) -> Unit,
     onRemoveFromContinue: (ContinueWatchingItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) return
 
-    Column(modifier = modifier.padding(vertical = 12.dp)) {
+    Column(modifier = modifier.padding(vertical = MovieHubDimens.Spacing.md)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = MovieHubDimens.Spacing.lg),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -673,7 +737,7 @@ fun ContinueWatchingSection(
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = "Pick up where you left off",
@@ -682,18 +746,18 @@ fun ContinueWatchingSection(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.md))
 
         val continueListState = rememberLazyListState()
         LazyRow(
             state = continueListState,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.lg),
+            horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
         ) {
             items(items, key = { item -> item.mediaId }) { item ->
                 ContinueWatchingCard(
@@ -703,7 +767,7 @@ fun ContinueWatchingSection(
                     onDetailsClick = { onDetailsClick(item) },
                     onMarkAsWatched = { onMarkAsWatched(item) },
                     onRemoveFromContinue = { onRemoveFromContinue(item) },
-                    modifier = Modifier.width(160.dp)
+                    modifier = Modifier.width(MovieHubDimens.Poster.continueWatchingWidth),
                 )
             }
         }
@@ -719,24 +783,41 @@ fun ContinueWatchingCard(
     onDetailsClick: () -> Unit,
     onMarkAsWatched: () -> Unit,
     onRemoveFromContinue: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val progress = if (item.durationMs > 0)
-        (item.progressMs.toFloat() / item.durationMs).coerceIn(0f, 1f) else 0f
+    val progress = if (item.durationMs > 0) {
+        (item.progressMs.toFloat() / item.durationMs).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
     val isFullyWatched = item.durationMs > 0 && progress >= 0.9f
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "CWPressScale"
+    )
 
     Column(modifier = modifier) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .height(MovieHubDimens.Poster.continueWatchingHeight)
+                .graphicsLayer(scaleX = scale, scaleY = scale)
+                .clip(RoundedCornerShape(MovieHubDimens.Spacing.md))
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
                     onClick = onMediaClick,
-                    onLongClick = { showSheet = true }
-                )
+                    onLongClick = { showSheet = true },
+                ),
         ) {
             Poster(
                 url = item.posterUrl,
@@ -744,39 +825,39 @@ fun ContinueWatchingCard(
                 title = item.title,
                 modifier = Modifier.fillMaxSize(),
                 isWatched = isFullyWatched,
-                progressFraction = if (!isFullyWatched) progress else -1f
+                progressFraction = if (!isFullyWatched) progress else -1f,
             )
 
             // Gradient overlay at bottom for readability
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp)
+                    .height(MovieHubDimens.Player.shimmerHeight)
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.85f)
-                            )
-                        )
-                    )
+                                Color.Black.copy(alpha = 0.85f),
+                            ),
+                        ),
+                    ),
             )
 
             // Play button overlay
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(48.dp)
+                    .size(MovieHubDimens.Icon.xxxl)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.6f))
                     .clickable(onClick = onResumeClick),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = "▶",
                     style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -791,23 +872,23 @@ fun ContinueWatchingCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 32.dp)
-                        .padding(horizontal = 8.dp),
+                        .padding(bottom = MovieHubDimens.Spacing.xxxl)
+                        .padding(horizontal = MovieHubDimens.Spacing.sm),
                 ) {
                     // Poster thumbnail + title header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            .padding(horizontal = MovieHubDimens.Spacing.sm, vertical = MovieHubDimens.Spacing.md),
+                        horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
                             modifier = Modifier
-                                .width(60.dp)
-                                .height(90.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .width(MovieHubDimens.Poster.bottomSheetThumbnailWidth)
+                                .height(MovieHubDimens.Poster.bottomSheetThumbnailHeight)
+                                .clip(RoundedCornerShape(MovieHubDimens.Spacing.sm))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
                         ) {
                             if (item.posterUrl != null) {
                                 Poster(
@@ -831,7 +912,7 @@ fun ContinueWatchingCard(
 
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = MovieHubDimens.Spacing.lg, vertical = MovieHubDimens.Spacing.xxs),
                     )
 
                     // Details
@@ -841,7 +922,7 @@ fun ContinueWatchingCard(
                         onClick = {
                             showSheet = false
                             onDetailsClick()
-                        }
+                        },
                     )
 
                     // Mark as Watched
@@ -851,7 +932,7 @@ fun ContinueWatchingCard(
                         onClick = {
                             showSheet = false
                             onMarkAsWatched()
-                        }
+                        },
                     )
 
                     // Remove
@@ -862,13 +943,13 @@ fun ContinueWatchingCard(
                             showSheet = false
                             onRemoveFromContinue()
                         },
-                        isDestructive = true
+                        isDestructive = true,
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.sm))
 
         Text(
             text = item.title,
@@ -876,7 +957,7 @@ fun ContinueWatchingCard(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
 
         if (item.durationMs > 0) {
@@ -890,7 +971,7 @@ fun ContinueWatchingCard(
                 text = remainingText,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                maxLines = 1
+                maxLines = 1,
             )
         }
     }
@@ -901,36 +982,37 @@ private fun ContinueWatchingSheetButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
-    isDestructive: Boolean = false
+    isDestructive: Boolean = false,
 ) {
-    val contentColor = if (isDestructive)
+    val contentColor = if (isDestructive) {
         MaterialTheme.colorScheme.error
-    else
+    } else {
         MaterialTheme.colorScheme.onSurface
+    }
 
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(MovieHubDimens.Spacing.md),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+            horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
+            modifier = Modifier.padding(horizontal = MovieHubDimens.Spacing.lg, vertical = MovieHubDimens.Spacing.ml),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = contentColor.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(MovieHubDimens.Icon.md),
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 color = contentColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -944,17 +1026,18 @@ fun HomeSection(
     watchedMediaIds: Set<String> = emptySet(),
     onSeeAllClick: () -> Unit,
     onItemClick: (id: String, type: String, addonUrl: String?) -> Unit,
-    modifier: Modifier = Modifier
+    onItemHover: (id: String, type: String, addonId: String?) -> Unit = { _, _, _ -> },
+    modifier: Modifier = Modifier,
 ) {
     if (mediaItems.isEmpty()) return
 
-    Column(modifier = modifier.padding(vertical = 16.dp)) {
+    Column(modifier = modifier.padding(vertical = MovieHubDimens.Spacing.lg)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = MovieHubDimens.Spacing.lg),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -963,7 +1046,7 @@ fun HomeSection(
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (subtitle != null) {
                     Text(
@@ -973,40 +1056,56 @@ fun HomeSection(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(MovieHubDimens.Spacing.md))
             Text(
                 text = "SEE ALL",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable { onSeeAllClick() }.padding(bottom = 4.dp),
-                maxLines = 1
+                modifier = Modifier.clickable { onSeeAllClick() }.padding(bottom = MovieHubDimens.Spacing.xxs),
+                maxLines = 1,
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.md))
 
         val rowListState = rememberLazyListState()
         LazyRow(
             state = rowListState,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.lg),
+            horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
         ) {
             items(mediaItems, key = { item -> "${item.sourceAddonId ?: ""}_${item.id}" }) { item ->
+                val interactionSource = remember { MutableInteractionSource() }
+                val isPressed by interactionSource.collectIsPressedAsState()
+
+                // Fire prewarm after 800ms of continuous press
+                LaunchedEffect(isPressed) {
+                    if (isPressed) {
+                        delay(MovieHubDimens.PrefetchTiming.catalogItemHoverMs)
+                        onItemHover(item.id, item.type.stremioType, item.sourceAddonId)
+                    }
+                }
+
                 Column(
-                    modifier = Modifier.width(150.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier
+                        .width(MovieHubDimens.Poster.homeWidth)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { onItemClick(item.id, item.type.stremioType, item.sourceAddonUrl) },
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
                 ) {
                     Poster(
                         url = item.posterUrl,
                         contentDescription = item.title,
-                        modifier = Modifier.fillMaxWidth().height(225.dp),
+                        modifier = Modifier.fillMaxWidth().height(MovieHubDimens.Poster.homeHeight),
                         isWatched = item.id in watchedMediaIds,
-                        onClick = { onItemClick(item.id, item.type.stremioType, item.sourceAddonUrl) }
                     )
                     Text(
                         text = item.title,

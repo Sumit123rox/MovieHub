@@ -9,7 +9,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
-import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 
 actual class PlatformDownloader actual constructor(private val ctx: PlatformContext) {
@@ -21,7 +20,7 @@ actual class PlatformDownloader actual constructor(private val ctx: PlatformCont
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
-        
+
         item.headers.forEach { (key, value) ->
             request.addRequestHeader(key, value)
         }
@@ -50,13 +49,15 @@ actual class PlatformDownloader actual constructor(private val ctx: PlatformCont
                 val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                 val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                
-                emit(DownloadProgress(
-                    downloadedSize = downloaded,
-                    totalSize = total,
-                    progress = if (total > 0) downloaded.toFloat() / total else 0f
-                ))
-                
+
+                emit(
+                    DownloadProgress(
+                        downloadedSize = downloaded,
+                        totalSize = total,
+                        progress = if (total > 0) downloaded.toFloat() / total else 0f,
+                    ),
+                )
+
                 if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED) {
                     cursor.close()
                     break
@@ -65,5 +66,27 @@ actual class PlatformDownloader actual constructor(private val ctx: PlatformCont
             cursor.close()
             delay(1000.milliseconds)
         }
+    }
+
+    actual fun getStorageInfo(): StorageInfo {
+        val path = ctx.filesDir
+        val total = path.totalSpace
+        val free = path.usableSpace
+        val appSize = getFolderSize(ctx.filesDir) + getFolderSize(ctx.cacheDir)
+        
+        return StorageInfo(
+            totalBytes = total,
+            freeBytes = free,
+            appBytes = appSize
+        )
+    }
+
+    private fun getFolderSize(file: java.io.File): Long {
+        if (file.isFile) return file.length()
+        var size = 0L
+        file.listFiles()?.forEach {
+            size += getFolderSize(it)
+        }
+        return size
     }
 }

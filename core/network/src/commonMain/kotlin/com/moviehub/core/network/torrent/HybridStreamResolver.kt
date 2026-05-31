@@ -94,8 +94,10 @@ class HybridStreamResolver(
 sealed class ResolveResult {
     /** Stream can play directly (either original non-torrent, or Debrid-resolved). */
     data class Direct(val stream: StreamItem) : ResolveResult()
+
     /** Stream is being downloaded via P2P at the given local URL. */
     data class P2p(val stream: StreamItem, val infoHash: String) : ResolveResult()
+
     /** Stream could not be resolved. */
     data class Unavailable(val stream: StreamItem, val reason: String) : ResolveResult()
 }

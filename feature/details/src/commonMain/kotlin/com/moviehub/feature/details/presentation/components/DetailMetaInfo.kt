@@ -51,10 +51,17 @@ fun DetailMetaInfo(
         val seasons = media.videos.mapNotNull { it.season }.distinct().size
         val episodes = media.videos.count { it.episode != null }
         if (seasons > 0) {
-            if (episodes > 0) "${seasons} Season${if (seasons != 1) "s" else ""}, ${episodes} Episode${if (episodes != 1) "s" else ""}"
-            else "${seasons} Season${if (seasons != 1) "s" else ""}"
-        } else null
-    } else null
+            if (episodes > 0) {
+                "$seasons Season${if (seasons != 1) "s" else ""}, $episodes Episode${if (episodes != 1) "s" else ""}"
+            } else {
+                "$seasons Season${if (seasons != 1) "s" else ""}"
+            }
+        } else {
+            null
+        }
+    } else {
+        null
+    }
 
     val hasMetaRow = releaseYear != null ||
         runtimeText != null ||
@@ -79,7 +86,6 @@ fun DetailMetaInfo(
             .animateContentSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-
         if (hasMetaRow) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -156,7 +162,7 @@ fun DetailMetaInfo(
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 media.genres.forEach { genre ->
                     DetailGenreBadge(text = genre)
@@ -254,20 +260,20 @@ private fun MetaLabelValueRow(
     value: String,
 ) {
     Row(
-        modifier = Modifier.padding(vertical = 1.dp)
+        modifier = Modifier.padding(vertical = 1.dp),
     ) {
         Text(
             text = "$label:  ",
             style = MaterialTheme.typography.bodyMedium.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.2.sp
+                letterSpacing = 0.2.sp,
             ),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(
-                lineHeight = 20.sp
+                lineHeight = 20.sp,
             ),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
         )
@@ -283,7 +289,7 @@ private fun DetailHeroMetaBadge(
         modifier = Modifier
             .background(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
             )
             .border(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f)),
@@ -296,7 +302,7 @@ private fun DetailHeroMetaBadge(
             text = text,
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.5.sp
+                letterSpacing = 0.5.sp,
             ),
             color = contentColor,
             maxLines = 1,
@@ -311,20 +317,20 @@ private fun DetailGenreBadge(text: String) {
         modifier = Modifier
             .background(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp),
             )
             .border(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp),
             )
             .padding(horizontal = 14.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.25.sp
+                letterSpacing = 0.25.sp,
             ),
             color = MaterialTheme.colorScheme.onBackground,
         )

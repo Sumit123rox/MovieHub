@@ -21,7 +21,7 @@ class TmdbSettingsRepository(
         val profileId = profileRepository.activeProfile.value?.id ?: return
         val current = userPreferencesDao.getPreference(profileId)
         val updated = (current ?: UserPreferencesEntity(profileId = profileId)).copy(
-            tmdbApiKey = key.trim()
+            tmdbApiKey = key.trim(),
         )
         userPreferencesDao.setPreference(updated)
         _isConfigured.value = key.isNotBlank()

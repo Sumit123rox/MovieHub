@@ -5,9 +5,9 @@ data class TorrentConfig(
     val enableDht: Boolean = true,
     val enablePex: Boolean = true,
     val maxConnections: Int = 50,
-    val downloadRateLimit: Int = 0,       // bytes/s, 0 = unlimited
-    val uploadRateLimit: Int = 0,         // bytes/s, 0 = unlimited
-    val httpStreamPort: Int = 8888,       // local HTTP server port for ExoPlayer
+    val downloadRateLimit: Int = 0, // bytes/s, 0 = unlimited
+    val uploadRateLimit: Int = 0, // bytes/s, 0 = unlimited
+    val httpStreamPort: Int = 8888, // local HTTP server port for ExoPlayer
     val maxActiveDownloads: Int = 3,
 )
 
@@ -25,8 +25,8 @@ data class TorrentFileInfo(
     val isVideo: Boolean = path.let {
         val lower = it.lowercase()
         lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".avi") ||
-        lower.endsWith(".mov") || lower.endsWith(".webm") || lower.endsWith(".m4v") ||
-        lower.endsWith(".ts") || lower.endsWith(".wmv") || lower.endsWith(".flv")
+            lower.endsWith(".mov") || lower.endsWith(".webm") || lower.endsWith(".m4v") ||
+            lower.endsWith(".ts") || lower.endsWith(".wmv") || lower.endsWith(".flv")
     },
 )
 
@@ -37,17 +37,17 @@ enum class TorrentStatus {
 data class TorrentProgress(
     val torrentId: String,
     val status: TorrentStatus,
-    val downloadRate: Long = 0,           // bytes/s
-    val uploadRate: Long = 0,             // bytes/s
+    val downloadRate: Long = 0, // bytes/s
+    val uploadRate: Long = 0, // bytes/s
     val totalDownloaded: Long = 0,
     val totalSize: Long = 0,
-    val progress: Float = 0f,             // 0..1
+    val progress: Float = 0f, // 0..1
     val numPeers: Int = 0,
     val numSeeds: Int = 0,
     val numPieces: Int = 0,
     val piecesHave: Int = 0,
     val selectedFile: TorrentFileInfo? = null,
-    val localStreamUrl: String? = null,   // http://localhost:PORT/file
+    val localStreamUrl: String? = null, // http://localhost:PORT/file
 )
 
 /** Callback interface for torrent state changes. */

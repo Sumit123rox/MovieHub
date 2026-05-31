@@ -7,10 +7,10 @@ plugins {
 
 kotlin {
     androidTarget()
-    
+
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "profile"
@@ -25,6 +25,7 @@ kotlin {
             implementation(project(":core:network"))
             implementation(project(":core:utils"))
             implementation(project(":core:database"))
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)

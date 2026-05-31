@@ -1,6 +1,5 @@
 package com.moviehub.navigation
 
-import com.moviehub.core.model.StreamItem
 import kotlinx.serialization.Serializable
 
 sealed interface Screen {
@@ -15,22 +14,22 @@ sealed interface Screen {
 
     @Serializable
     data object Auth : Screen
-    
+
     @Serializable
     data object Sync : Screen
 
     @Serializable
     data object Profile : Screen
-    
+
     @Serializable
     data object Settings : Screen
-    
+
     @Serializable
     data class Details(val id: String, val type: String, val addonUrl: String? = null) : Screen
 
     @Serializable
     data class PersonDetail(val personId: Int, val personName: String? = null) : Screen
-    
+
     @Serializable
     data class Player(val launchId: Long) : Screen
 
@@ -45,4 +44,7 @@ sealed interface Screen {
 
     @Serializable
     data object Downloads : Screen
+
+    @Serializable
+    data object Library : Screen
 }

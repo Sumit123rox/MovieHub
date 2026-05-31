@@ -1,10 +1,15 @@
 package com.moviehub.feature.profile.presentation
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -18,14 +23,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.UserPreferencesDao
 import com.moviehub.core.database.UserPreferencesEntity
 import com.moviehub.core.ui.theme.AccentType
 import com.moviehub.core.ui.theme.Accents
+import com.moviehub.core.ui.theme.MovieHubDimens
 import com.moviehub.core.ui.theme.ThemeType
 import com.moviehub.core.ui.theme.Themes
 import kotlinx.coroutines.launch
@@ -34,13 +42,13 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
 ) {
     val userPreferencesDao: UserPreferencesDao = koinInject()
     val profileRepository: ProfileRepository = koinInject()
     val scope = rememberCoroutineScope()
     val prefs by userPreferencesDao.getPreferenceFlow(
-        profileRepository.activeProfile.value?.id ?: ""
+        profileRepository.activeProfile.value?.id ?: "",
     ).collectAsState(null)
 
     Scaffold(
@@ -55,47 +63,47 @@ fun AppearanceScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                ),
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp)
+                .padding(horizontal = MovieHubDimens.Spacing.xl, vertical = MovieHubDimens.Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xxl),
         ) {
             val currentTheme = prefs?.theme?.let { safeThemeFromString(it) } ?: ThemeType.NUVIO_DARK
             val currentAccent = prefs?.accentColor?.let { safeAccentFromString(it) } ?: AccentType.BLUE
 
             // Theme Section
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.ml)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
                 ) {
                     Icon(
                         Icons.Default.Palette,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(MovieHubDimens.Icon.sm),
                     )
                     Text(
                         text = "Theme",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.3.sp
+                            letterSpacing = MovieHubDimens.Font.trackingWide,
                         ),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "Pick your vibe",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     )
                 }
 
@@ -103,61 +111,126 @@ fun AppearanceScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
                 ) {
                     ThemeType.entries.forEach { theme ->
                         val isSelected = theme == currentTheme
                         val preview = Themes.fromType(theme)
 
+                        val interactionSource = remember { MutableInteractionSource() }
+                        val isPressed by interactionSource.collectIsPressedAsState()
+                        val scale by animateFloatAsState(
+                            targetValue = if (isPressed) 0.96f else 1.0f,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                            label = "ThemeScale_${theme.name}"
+                        )
+
                         Surface(
-                            onClick = { savePreference(scope, profileRepository, userPreferencesDao, prefs, theme, null) },
+                            modifier = Modifier
+                                .width(108.dp)
+                                .graphicsLayer(scaleX = scale, scaleY = scale)
+                                .clip(RoundedCornerShape(MovieHubDimens.Radius.lg))
+                                .clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null,
+                                    onClick = { savePreference(scope, profileRepository, userPreferencesDao, prefs, theme, null) }
+                                ),
                             color = preview.surface,
-                            shape = RoundedCornerShape(16.dp),
-                            border = if (isSelected) BorderStroke(
-                                2.dp, MaterialTheme.colorScheme.primary
-                            ) else BorderStroke(
-                                1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                            ),
-                            modifier = Modifier.width(108.dp)
+                            shape = RoundedCornerShape(MovieHubDimens.Radius.lg),
+                            border = if (isSelected) {
+                                BorderStroke(
+                                    MovieHubDimens.Spacing.dp2, MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                BorderStroke(
+                                    MovieHubDimens.Spacing.dp1, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                )
+                            },
                         ) {
                             Column(
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier.padding(MovieHubDimens.Spacing.md),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.ms),
                             ) {
-                                // Preview swatch
+                                // Premium dynamic mini mockup preview of each theme
                                 Box(
                                     modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(preview.background),
-                                    contentAlignment = Alignment.Center
+                                        .fillMaxWidth()
+                                        .height(56.dp)
+                                        .clip(RoundedCornerShape(MovieHubDimens.Radius.sm))
+                                        .background(preview.background)
+                                        .border(
+                                            width = MovieHubDimens.Spacing.dp1,
+                                            color = preview.onSurface.copy(alpha = 0.08f),
+                                            shape = RoundedCornerShape(MovieHubDimens.Radius.sm)
+                                        )
+                                        .padding(MovieHubDimens.Spacing.xxs)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(18.dp)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(MaterialTheme.colorScheme.primary)
-                                    )
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xxs),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        // Mini Hero Banner
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(18.dp)
+                                                .clip(RoundedCornerShape(MovieHubDimens.Spacing.xxs))
+                                                .background(preview.surfaceVariant)
+                                        ) {
+                                            // Mini Play Button in the mockup
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(end = MovieHubDimens.Spacing.xxs)
+                                                    .size(MovieHubDimens.Spacing.sm)
+                                                    .align(Alignment.BottomEnd)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.primary)
+                                            )
+                                        }
+                                        // Mini Catalog Row
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xxs),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(MovieHubDimens.Icon.sm)
+                                                    .clip(RoundedCornerShape(MovieHubDimens.Spacing.xxs))
+                                                    .background(preview.surfaceVariant)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(MovieHubDimens.Icon.sm)
+                                                    .clip(RoundedCornerShape(MovieHubDimens.Spacing.xxs))
+                                                    .background(preview.surfaceVariant)
+                                            )
+                                        }
+                                    }
                                 }
 
                                 Text(
                                     text = theme.label,
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        fontSize = 11.sp
+                                        fontSize = MovieHubDimens.Font.sm,
                                     ),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary
-                                            else preview.onSurface.copy(alpha = 0.7f),
-                                    maxLines = 1
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        preview.onSurface.copy(alpha = 0.7f)
+                                    },
+                                    maxLines = 1,
                                 )
 
                                 if (isSelected) {
                                     Box(
                                         modifier = Modifier
-                                            .size(6.dp)
+                                            .size(MovieHubDimens.Spacing.xs)
                                             .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primary)
+                                            .background(MaterialTheme.colorScheme.primary),
                                     )
                                 }
                             }
@@ -169,90 +242,52 @@ fun AppearanceScreen(
             // Divider
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                thickness = 1.dp
+                thickness = MovieHubDimens.Spacing.dp1,
             )
 
             // Accent Color Section
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.ml)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
                 ) {
                     Icon(
                         Icons.Default.Palette,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(MovieHubDimens.Icon.sm),
                     )
                     Text(
                         text = "Accent Color",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.3.sp
+                            letterSpacing = MovieHubDimens.Font.trackingWide,
                         ),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "Pick your color",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     )
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md)) {
                     AccentType.entries.chunked(5).forEach { row ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                            horizontalArrangement = Arrangement.SpaceEvenly,
                         ) {
                             row.forEach { accentType ->
-                                val accentColor = Accents.fromType(accentType)
                                 val isSelected = accentType == currentAccent
-
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.clickable {
+                                AccentColorWidget(
+                                    accentType = accentType,
+                                    isSelected = isSelected,
+                                    onClick = {
                                         savePreference(scope, profileRepository, userPreferencesDao, prefs, null, accentType)
                                     }
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(CircleShape)
-                                            .background(accentColor.primary)
-                                            .then(
-                                                if (isSelected) Modifier.border(
-                                                    3.dp, MaterialTheme.colorScheme.onSurface,
-                                                    CircleShape
-                                                ) else Modifier.border(
-                                                    1.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
-                                                    CircleShape
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isSelected) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = "Selected",
-                                                tint = accentColor.onPrimary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = accentType.label,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 10.sp
-                                        ),
-                                        color = if (isSelected) MaterialTheme.colorScheme.onSurface
-                                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                                        maxLines = 1
-                                    )
-                                }
+                                )
                             }
                         }
                     }
@@ -264,45 +299,127 @@ fun AppearanceScreen(
 
             Surface(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
+                shape = RoundedCornerShape(MovieHubDimens.Radius.lg),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(MovieHubDimens.Spacing.lg),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .size(MovieHubDimens.Avatar.sm)
+                            .clip(RoundedCornerShape(MovieHubDimens.Radius.sm))
                             .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(20.dp)
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(MaterialTheme.colorScheme.primary)
+                                .size(MovieHubDimens.Icon.sm)
+                                .clip(RoundedCornerShape(MovieHubDimens.Spacing.xxs))
+                                .background(MaterialTheme.colorScheme.primary),
                         )
                     }
                     Column {
                         Text(
                             text = "Preview",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             text = "${currentTheme.label} · ${currentAccent.label} accent",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.sm))
         }
+    }
+}
+
+@Composable
+private fun AccentColorWidget(
+    accentType: AccentType,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val accentColor = remember(accentType) { Accents.fromType(accentType) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "AccentScale_${accentType.name}"
+    )
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 0.45f else 0.08f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "AccentGlow_${accentType.name}"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
+        modifier = Modifier
+            .graphicsLayer(scaleX = scale, scaleY = scale)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .width(MovieHubDimens.Icon.jumbo)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(accentColor.primary)
+                .border(
+                    width = if (isSelected) MovieHubDimens.Spacing.dp3 else MovieHubDimens.Spacing.dp1,
+                    color = if (isSelected) accentColor.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                    shape = CircleShape
+                )
+                // Neon glow ring outline when selected
+                .then(
+                    if (isSelected) {
+                        Modifier.border(
+                            width = MovieHubDimens.Spacing.dp2,
+                            color = accentColor.primary.copy(alpha = glowAlpha),
+                            shape = CircleShape
+                        )
+                    } else Modifier
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = accentColor.onPrimary,
+                    modifier = Modifier.size(MovieHubDimens.Icon.sm),
+                )
+            }
+        }
+        Text(
+            text = accentType.label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                fontSize = MovieHubDimens.Font.xs,
+            ),
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+            },
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -312,7 +429,7 @@ private fun savePreference(
     userPreferencesDao: UserPreferencesDao,
     prefs: UserPreferencesEntity?,
     theme: ThemeType?,
-    accent: AccentType?
+    accent: AccentType?,
 ) {
     scope.launch {
         val profile = profileRepository.activeProfile.value ?: return@launch
@@ -324,7 +441,7 @@ private fun savePreference(
                 useAmoled = true,
                 language = prefs?.language ?: "en",
                 tmdbApiKey = prefs?.tmdbApiKey ?: "",
-            )
+            ),
         )
     }
 }
@@ -344,3 +461,5 @@ private fun safeAccentFromString(value: String): AccentType {
         AccentType.BLUE
     }
 }
+
+

@@ -15,14 +15,14 @@ data class StremioManifest(
     @SerialName("types") val types: List<String>? = emptyList(),
     @SerialName("catalogs") val catalogs: List<StremioCatalog>? = emptyList(),
     @SerialName("idPrefixes") val idPrefixes: List<String>? = emptyList(),
-    @SerialName("contactEmail") val contactEmail: String? = null
+    @SerialName("contactEmail") val contactEmail: String? = null,
 )
 
 @Serializable
 data class StremioResource(
     @SerialName("name") val name: String,
     @SerialName("types") val types: List<String>? = emptyList(),
-    @SerialName("idPrefixes") val idPrefixes: List<String>? = emptyList()
+    @SerialName("idPrefixes") val idPrefixes: List<String>? = emptyList(),
 )
 
 @Serializable
@@ -30,25 +30,25 @@ data class StremioCatalog(
     @SerialName("type") val type: String,
     @SerialName("id") val id: String,
     @SerialName("name") val name: String? = null,
-    @SerialName("extra") val extra: List<StremioExtra>? = emptyList()
+    @SerialName("extra") val extra: List<StremioExtra>? = emptyList(),
 )
 
 @Serializable
 data class StremioExtra(
     @SerialName("name") val name: String,
     @SerialName("isRequired") val isRequired: Boolean? = false,
-    @SerialName("options") val options: List<String>? = emptyList()
+    @SerialName("options") val options: List<String>? = emptyList(),
 )
 
 @Serializable
 data class StremioCatalogResponse(
-    @SerialName("metas") val metas: List<StremioMeta> = emptyList()
+    @SerialName("metas") val metas: List<StremioMeta> = emptyList(),
 )
 
 @Serializable
 data class StremioMeta(
     @SerialName("id") val id: String,
-    @SerialName("type") val type: String,
+    @SerialName("type") val type: String = "",
     @SerialName("name") val name: String,
     @SerialName("imdb_id") val imdbId: String? = null,
     @SerialName("poster") val poster: String? = null,
@@ -61,7 +61,7 @@ data class StremioMeta(
     @SerialName("imdbRating") val imdbRating: String? = null,
     @SerialName("director") val director: List<String>? = emptyList(),
     @SerialName("cast") val cast: List<String>? = emptyList(),
-    @SerialName("videos") val videos: List<StremioVideo>? = null
+    @SerialName("videos") val videos: List<StremioVideo>? = null,
 )
 
 @Serializable
@@ -72,12 +72,12 @@ data class StremioVideo(
     @SerialName("season") val season: Int? = null,
     @SerialName("episode") val episode: Int? = null,
     @SerialName("thumbnail") val thumbnail: String? = null,
-    @SerialName("overview") val overview: String? = null
+    @SerialName("overview") val overview: String? = null,
 )
 
 @Serializable
 data class StremioStreamResponse(
-    @SerialName("streams") val streams: List<StremioStream> = emptyList()
+    @SerialName("streams") val streams: List<StremioStream> = emptyList(),
 )
 
 @Serializable
@@ -89,12 +89,12 @@ data class StremioStream(
     @SerialName("infoHash") val infoHash: String? = null,
     @SerialName("fileIdx") val fileIdx: Int? = null,
     @SerialName("externalUrl") val externalUrl: String? = null,
-    @SerialName("behaviorHints") val behaviorHints: StremioBehaviorHints? = null
+    @SerialName("behaviorHints") val behaviorHints: StremioBehaviorHints? = null,
 )
 
 @Serializable
 data class StremioBehaviorHints(
     @SerialName("notWebReady") val notWebReady: Boolean? = null,
     @SerialName("bingeGroup") val bingeGroup: String? = null,
-    @SerialName("proxyHeaders") val proxyHeaders: Map<String, String>? = null
+    @SerialName("proxyHeaders") val proxyHeaders: Map<String, String>? = null,
 )

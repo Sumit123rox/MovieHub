@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 9,
-    "identityHash": "6f19f1dad69dfac5c13ebb9f36f66f99",
+    "identityHash": "aed87109e02cab3b05ef56cc0e7e9161",
     "entities": [
       {
         "tableName": "addon",
@@ -122,7 +122,7 @@
       },
       {
         "tableName": "user_preferences",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileId` TEXT NOT NULL, `theme` TEXT NOT NULL, `accentColor` TEXT NOT NULL, `useAmoled` INTEGER NOT NULL, `language` TEXT NOT NULL, `tmdbApiKey` TEXT NOT NULL, `debridApiKey` TEXT NOT NULL, `seekIncrement` INTEGER NOT NULL, PRIMARY KEY(`profileId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileId` TEXT NOT NULL, `theme` TEXT NOT NULL, `accentColor` TEXT NOT NULL, `useAmoled` INTEGER NOT NULL, `language` TEXT NOT NULL, `tmdbApiKey` TEXT NOT NULL, `debridApiKey` TEXT NOT NULL, `seekIncrement` INTEGER NOT NULL, `subtitleStyleJson` TEXT NOT NULL, PRIMARY KEY(`profileId`))",
         "fields": [
           {
             "fieldPath": "profileId",
@@ -170,6 +170,12 @@
             "fieldPath": "seekIncrement",
             "columnName": "seekIncrement",
             "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtitleStyleJson",
+            "columnName": "subtitleStyleJson",
+            "affinity": "TEXT",
             "notNull": true
           }
         ],
@@ -471,57 +477,11 @@
             "profileId"
           ]
         }
-      },
-      {
-        "tableName": "MediaFtsEntity",
-        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS5(`mediaId`, `title`, `overview`, tokenize=`porter unicode61`)",
-        "fields": [
-          {
-            "fieldPath": "mediaId",
-            "columnName": "mediaId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "title",
-            "columnName": "title",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "overview",
-            "columnName": "overview",
-            "affinity": "TEXT"
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": true,
-          "columnNames": [
-            "rowid"
-          ]
-        },
-        "ftsVersion": "FTS5",
-        "ftsOptions": {
-          "tokenizer": "porter",
-          "tokenizerArgs": [
-            "unicode61"
-          ],
-          "contentTable": "",
-          "languageIdColumnName": "",
-          "matchInfo": "FTS4",
-          "notIndexedColumns": [],
-          "prefixSizes": [],
-          "preferredOrder": "ASC",
-          "contentRowId": "",
-          "columnSize": true,
-          "detail": "FULL"
-        },
-        "contentSyncTriggers": []
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6f19f1dad69dfac5c13ebb9f36f66f99')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'aed87109e02cab3b05ef56cc0e7e9161')"
     ]
   }
 }

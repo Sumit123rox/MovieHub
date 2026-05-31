@@ -1,6 +1,5 @@
 package com.moviehub.core.network
 
-import com.moviehub.core.network.mapper.toDomain
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,8 +13,8 @@ class NetworkRobustnessTest {
             mapOf(
                 "success.addon" to MockStremioEngine.successManifest,
                 "broken.addon" to MockStremioEngine.malformedJson,
-                "error.addon" to "ERROR_500"
-            )
+                "error.addon" to "ERROR_500",
+            ),
         )
         val apiClient = StremioApiClient(httpClient)
 

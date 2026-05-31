@@ -1,7 +1,7 @@
 package com.moviehub.core.network.scraper
 
-import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSDate
+import platform.Foundation.NSUserDefaults
 import platform.Foundation.timeIntervalSince1970
 
 actual class PluginStorage {
@@ -13,7 +13,7 @@ actual class PluginStorage {
     actual fun saveState(profileId: String, payload: String) {
         NSUserDefaults.standardUserDefaults.setObject(
             payload,
-            forKey = "${pluginsStateKey}_$profileId"
+            forKey = "${pluginsStateKey}_$profileId",
         )
     }
 }

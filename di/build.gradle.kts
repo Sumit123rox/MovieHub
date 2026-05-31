@@ -8,10 +8,10 @@ kotlin {
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
     androidTarget()
-    
+
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "di"
@@ -31,6 +31,7 @@ kotlin {
             implementation(project(":feature:sync"))
             implementation(project(":core:network"))
             implementation(project(":core:database"))
+            implementation(project(":core:player-api"))
             implementation(libs.androidx.room3.runtime)
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)

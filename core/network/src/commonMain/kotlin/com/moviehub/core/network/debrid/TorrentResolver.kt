@@ -25,7 +25,7 @@ class TorrentResolver(
         val result = debridClient.resolveToDirectUrl(magnet)
         return result.fold(
             onSuccess = { url -> stream.copy(url = url) },
-            onFailure = { stream }
+            onFailure = { stream },
         )
     }
 

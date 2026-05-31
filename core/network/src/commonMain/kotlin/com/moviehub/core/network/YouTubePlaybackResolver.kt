@@ -15,7 +15,7 @@ import kotlinx.serialization.json.*
  * Ported and optimized from the Nuvio reference app.
  */
 class YouTubePlaybackResolver(
-    private val httpClient: HttpClient
+    private val httpClient: HttpClient,
 ) {
     private val logger = Logger.withTag("YTResolver")
     private val json = Json { ignoreUnknownKeys = true }
@@ -34,7 +34,7 @@ class YouTubePlaybackResolver(
                 header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 header("Accept-Language", "en-US,en;q=0.9")
             }
-            
+
             if (!watchResponse.status.isSuccess()) return@withContext null
             val html = watchResponse.bodyAsText()
 
@@ -45,7 +45,7 @@ class YouTubePlaybackResolver(
             val clients = listOf(
                 "ANDROID_VR" to "1.56.21",
                 "ANDROID" to "17.31.35",
-                "TVHTML5" to "7.20230405.08.01"
+                "TVHTML5" to "7.20230405.08.01",
             )
 
             for ((clientName, clientVersion) in clients) {
@@ -65,33 +65,35 @@ class YouTubePlaybackResolver(
         apiKey: String,
         visitorData: String?,
         clientName: String,
-        clientVersion: String
+        clientVersion: String,
     ): TrailerPlaybackSource? {
         return try {
             val endpoint = "https://www.youtube.com/youtubei/v1/player?key=$apiKey"
             val playerResponse = httpClient.post(endpoint) {
                 contentType(ContentType.Application.Json)
                 if (visitorData != null) header("X-Goog-Visitor-Id", visitorData)
-                
-                setBody(buildJsonObject {
-                    put("videoId", videoId)
-                    put("contentCheckOk", true)
-                    put("racyCheckOk", true)
-                    putJsonObject("context") {
-                        putJsonObject("client") {
-                            put("clientName", clientName)
-                            put("clientVersion", clientVersion)
-                            put("platform", "MOBILE")
-                            put("osName", "Android")
-                            put("osVersion", "12")
+
+                setBody(
+                    buildJsonObject {
+                        put("videoId", videoId)
+                        put("contentCheckOk", true)
+                        put("racyCheckOk", true)
+                        putJsonObject("context") {
+                            putJsonObject("client") {
+                                put("clientName", clientName)
+                                put("clientVersion", clientVersion)
+                                put("platform", "MOBILE")
+                                put("osName", "Android")
+                                put("osVersion", "12")
+                            }
                         }
-                    }
-                    putJsonObject("playbackContext") {
-                        putJsonObject("contentPlaybackContext") {
-                            put("html5Preference", "HTML5_PREF_WANTS")
+                        putJsonObject("playbackContext") {
+                            putJsonObject("contentPlaybackContext") {
+                                put("html5Preference", "HTML5_PREF_WANTS")
+                            }
                         }
-                    }
-                })
+                    },
+                )
             }
 
             if (!playerResponse.status.isSuccess()) return null
@@ -106,7 +108,7 @@ class YouTubePlaybackResolver(
             }
 
             val streamingData = responseJson["streamingData"]?.jsonObject ?: return null
-            
+
             // 1. Prefer HLS Manifest for adaptive bitrate and performance
             val hlsUrl = streamingData["hlsManifestUrl"]?.jsonPrimitive?.content
             if (!hlsUrl.isNullOrBlank()) {
@@ -116,7 +118,7 @@ class YouTubePlaybackResolver(
             // 2. Fallback to high-quality progressive MP4
             val formats = streamingData["formats"]?.jsonArray
             val bestProgressive = formats?.mapNotNull { it.jsonObject }
-                ?.filter { 
+                ?.filter {
                     val mime = it["mimeType"]?.jsonPrimitive?.content ?: ""
                     mime.contains("video/mp4")
                 }
@@ -152,4 +154,3 @@ class YouTubePlaybackResolver(
         }
     }
 }
-

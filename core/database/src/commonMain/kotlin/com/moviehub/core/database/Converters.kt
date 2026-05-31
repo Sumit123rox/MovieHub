@@ -28,4 +28,4 @@ class Converters {
 
     @TypeConverter
     fun toDownloadState(value: String): com.moviehub.core.model.DownloadState = com.moviehub.core.model.DownloadState.valueOf(value)
-    }
+}

@@ -39,11 +39,13 @@ internal val MIGRATION_6_7 = object : Migration(6, 7) {
 
 internal val MIGRATION_7_8 = object : Migration(7, 8) {
     override suspend fun migrate(connection: SQLiteConnection) {
-        connection.execSQL("""
+        connection.execSQL(
+            """
             CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
                 mediaId, title, overview, tokenize='porter unicode61'
             )
-        """)
+        """,
+        )
     }
 }
 
@@ -53,13 +55,37 @@ internal val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+internal val MIGRATION_9_10 = object : Migration(9, 10) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `user_preferences` ADD COLUMN `subtitleStyleJson` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+internal val MIGRATION_10_11 = object : Migration(10, 11) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `user_preferences` ADD COLUMN `playbackPreferencesJson` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 fun RoomDatabase.Builder<MovieDatabase>.configureDatabase(): RoomDatabase.Builder<MovieDatabase> {
     return this
         .setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+        .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+        .fallbackToDestructiveMigration()
         .addCallback(object : RoomDatabase.Callback() {
+            override suspend fun onCreate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
+                        mediaId, title, overview, tokenize='porter unicode61'
+                    )
+                """,
+                )
+            }
+
             override suspend fun onOpen(connection: SQLiteConnection) {
+                connection.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(mediaId, title, overview, tokenize='porter unicode61')")
                 connection.execSQL("PRAGMA journal_mode=WAL")
                 connection.execSQL("PRAGMA synchronous=NORMAL")
                 connection.execSQL("PRAGMA busy_timeout=5000")

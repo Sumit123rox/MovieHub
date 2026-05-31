@@ -1,19 +1,17 @@
 package com.moviehub.core.network.torrent
 
-import android.content.Context
 import com.moviehub.core.database.PlatformContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.IOException
@@ -165,8 +163,11 @@ actual class TorrentEngine actual constructor(private val ctx: PlatformContext) 
             val state = activeTorrents[infoHash] ?: break
             if (attempts > 3) {
                 _progress.value = _progress.value.map {
-                    if (it.torrentId == infoHash) it.copy(status = TorrentStatus.ERROR, progress = 0f)
-                    else it
+                    if (it.torrentId == infoHash) {
+                        it.copy(status = TorrentStatus.ERROR, progress = 0f)
+                    } else {
+                        it
+                    }
                 }
                 break
             }
@@ -203,6 +204,7 @@ private class LocalStreamServer(private val port: Int) {
     private val unavailableRoutes = ConcurrentHashMap<String, Boolean>()
     private var server: ServerSocket? = null
     private var executor: ExecutorService? = null
+
     @Volatile private var running = false
 
     fun start() {

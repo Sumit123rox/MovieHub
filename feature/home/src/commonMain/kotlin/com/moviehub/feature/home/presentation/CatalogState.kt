@@ -10,5 +10,5 @@ data class CatalogState(
     val canPaginate: Boolean = true,
     val displayedItems: List<MediaItem> = emptyList(),
     val watchedMediaIds: Set<String> = emptySet(),
-    val error: String? = null
+    val error: String? = null,
 )

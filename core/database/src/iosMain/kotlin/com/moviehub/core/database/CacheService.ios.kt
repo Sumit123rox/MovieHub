@@ -1,6 +1,8 @@
 package com.moviehub.core.database
 
-import platform.Foundation.NSDate
+import kotlinx.cinterop.ExperimentalForeignApi
+import platform.posix.time
 
+@OptIn(ExperimentalForeignApi::class)
 internal actual fun cacheServiceTimeMillis(): Long =
-    (NSDate().timeIntervalSince1970 * 1000).toLong()
+    time(null) * 1000L

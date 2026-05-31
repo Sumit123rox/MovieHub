@@ -158,7 +158,7 @@ data class StremioCompany(
 @Serializable
 data class StremioMeta(
     val id: String,
-    val type: String,
+    val type: String = "",
     val name: String,
     @SerialName("imdb_id") val imdbId: String? = null,
     val poster: String? = null,

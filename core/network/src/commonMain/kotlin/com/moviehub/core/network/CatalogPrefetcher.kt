@@ -5,7 +5,6 @@ import com.moviehub.core.model.CatalogResponse
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class CatalogPrefetcher(
@@ -33,7 +32,7 @@ class CatalogPrefetcher(
                         val response = apiClient.getCatalog(url, catalog.type, catalog.id)
                         if (response != null) {
                             cacheService.putCacheSerialized(
-                                cacheKey, "catalog", response, CatalogResponse.serializer()
+                                cacheKey, "catalog", response, CatalogResponse.serializer(),
                             )
                         }
                     } catch (_: Exception) { }

@@ -5,7 +5,7 @@ import com.moviehub.core.model.*
 fun StremioMeta.toDomain(addonId: String? = null, addonUrl: String? = null): MediaItem {
     // Determine the most reliable background/backdrop URL
     val resolvedBackground = background ?: poster
-    
+
     return MediaItem(
         id = id,
         title = name,
@@ -30,18 +30,18 @@ fun StremioMeta.toDomain(addonId: String? = null, addonUrl: String? = null): Med
         networks = networks.map { MediaCompany(it.name, it.logo) },
         sourceAddonId = addonId,
         sourceAddonUrl = addonUrl,
-        videos = videos.map { 
+        videos = videos.map {
             MediaVideo(
-                id = it.id, 
-                title = it.title ?: it.name ?: "Unknown Episode", 
-                released = it.released, 
-                season = it.season, 
-                episode = it.episode, 
+                id = it.id,
+                title = it.title ?: it.name ?: "Unknown Episode",
+                released = it.released,
+                season = it.season,
+                episode = it.episode,
                 thumbnail = it.thumbnail ?: resolvedBackground, // Use series background if episode thumb is missing
-                overview = it.overview
-            ) 
+                overview = it.overview,
+            )
         },
-        trailers = trailers.map { MediaTrailer(id = it.source, url = it.source, type = it.type ?: "Trailer") }
+        trailers = trailers.map { MediaTrailer(id = it.source, url = it.source, type = it.type ?: "Trailer") },
     )
 }
 

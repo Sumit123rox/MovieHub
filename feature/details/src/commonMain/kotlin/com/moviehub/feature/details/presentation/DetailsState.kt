@@ -1,9 +1,10 @@
 package com.moviehub.feature.details.presentation
 
+import androidx.compose.runtime.Immutable
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.StreamItem
 import com.moviehub.core.model.TrailerPlaybackSource
-import androidx.compose.runtime.Immutable
+import com.moviehub.feature.details.data.AddonStreamStatus
 
 @Immutable
 data class DetailsState(
@@ -12,6 +13,7 @@ data class DetailsState(
     val isResolvingTrailer: Boolean = false,
     val totalStreamAddons: Int = 0,
     val processedStreamAddons: Int = 0,
+    val addonStreamStatuses: Map<String, AddonStreamStatus> = emptyMap(),
     val mediaItem: MediaItem? = null,
     val streams: List<StreamItem> = emptyList(),
     val selectedTrailerSource: TrailerPlaybackSource? = null,

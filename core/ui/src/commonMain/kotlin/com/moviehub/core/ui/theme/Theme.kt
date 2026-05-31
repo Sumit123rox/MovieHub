@@ -5,13 +5,12 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
 
 @Composable
 fun MovieHubTheme(
     themeType: ThemeType = ThemeType.NUVIO_DARK,
     accentType: AccentType = AccentType.BLUE,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val accent = remember(accentType) { Accents.fromType(accentType) }
     val theme = remember(themeType) { Themes.fromType(themeType) }
@@ -56,6 +55,6 @@ fun MovieHubTheme(
         content = {
             SetStatusBarStyle(theme.isDark)
             content()
-        }
+        },
     )
 }

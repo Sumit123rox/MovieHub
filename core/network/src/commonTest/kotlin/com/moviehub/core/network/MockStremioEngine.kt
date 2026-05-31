@@ -1,6 +1,5 @@
 package com.moviehub.core.network
 
-import com.moviehub.core.network.model.StremioManifest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -37,36 +36,38 @@ object MockStremioEngine {
         val mockEngine = MockEngine { request ->
             val url = request.url.toString()
             val responseBody = responses.entries.find { url.contains(it.key) }?.value
-            
+
             if (responseBody != null) {
                 if (responseBody == "ERROR_500") {
                     respond(
                         content = "Server Error",
                         status = HttpStatusCode.InternalServerError,
-                        headers = headersOf(HttpHeaders.ContentType, "text/plain")
+                        headers = headersOf(HttpHeaders.ContentType, "text/plain"),
                     )
                 } else {
                     respond(
                         content = responseBody,
                         status = HttpStatusCode.OK,
-                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
                     )
                 }
             } else {
                 respond(
                     content = "Not Found",
                     status = HttpStatusCode.NotFound,
-                    headers = headersOf(HttpHeaders.ContentType, "text/plain")
+                    headers = headersOf(HttpHeaders.ContentType, "text/plain"),
                 )
             }
         }
 
         return HttpClient(mockEngine) {
             install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                })
+                json(
+                    Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    },
+                )
             }
         }
     }

@@ -14,10 +14,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.moviehub.core.ui.theme.MovieHubDimens
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
+
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 
 @Composable
 fun Poster(
@@ -26,18 +34,38 @@ fun Poster(
     contentDescription: String? = null,
     title: String? = null,
     shape: Shape = MaterialTheme.shapes.medium,
-    aspectRatio: Float = 2f / 3f,
+    aspectRatio: Float = MovieHubDimens.Poster.aspectRatio,
     quality: String? = null,
     isWatched: Boolean = false,
     progressFraction: Float = -1f,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && onClick != null) 0.96f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "PosterPressScale"
+    )
+
     Surface(
         modifier = modifier
+            .graphicsLayer(scaleX = scale, scaleY = scale)
             .aspectRatio(aspectRatio)
             .clip(shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        color = MaterialTheme.colorScheme.surfaceVariant
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onClick
+                    )
+                } else Modifier
+            ),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (url != null) {
@@ -50,14 +78,14 @@ fun Poster(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .shimmerEffect()
+                                .shimmerEffect(),
                         )
                     },
                     onFailure = {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("!", color = MaterialTheme.colorScheme.error)
                         }
-                    }
+                    },
                 )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -68,7 +96,7 @@ fun Poster(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         maxLines = 3,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(8.dp)
+                        modifier = Modifier.padding(MovieHubDimens.Spacing.sm),
                     )
                 }
             }
@@ -78,7 +106,7 @@ fun Poster(
                     text = quality,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
+                        .padding(MovieHubDimens.Spacing.sm),
                 )
             }
 
@@ -87,14 +115,14 @@ fun Poster(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(4.dp)
+                        .height(MovieHubDimens.Player.seekBarActive)
                         .align(Alignment.BottomCenter)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)),
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(fraction = progressFraction.coerceIn(0f, 1f))
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(MaterialTheme.colorScheme.primary),
                     )
                 }
             }
@@ -104,16 +132,16 @@ fun Poster(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .size(26.dp)
+                        .padding(MovieHubDimens.Spacing.sm)
+                        .size(MovieHubDimens.Icon.xl)
                         .background(MaterialTheme.colorScheme.primary, CircleShape),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "✓",
                         color = MaterialTheme.colorScheme.onPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = MovieHubDimens.Font.lg,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }

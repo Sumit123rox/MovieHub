@@ -56,3 +56,9 @@ dependencies {
     add("kspIosArm64", room3Compiler)
     add("kspIosSimulatorArm64", room3Compiler)
 }
+
+// Disable metadata compilation for this module to avoid Room3's expect/actual conflict
+// with the generated MovieDatabaseConstructor. Platform builds (Android, iOS) work fine.
+tasks.matching { it.name == "compileCommonMainKotlinMetadata" }.configureEach {
+    enabled = false
+}

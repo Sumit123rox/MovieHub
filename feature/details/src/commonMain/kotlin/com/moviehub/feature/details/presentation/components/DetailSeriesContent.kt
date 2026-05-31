@@ -11,9 +11,14 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,7 +26,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +35,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.graphicsLayer
+import com.moviehub.core.ui.theme.MovieHubDimens
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -151,7 +157,7 @@ fun DetailSeriesContent(
 
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(vertical = 16.dp)
+            modifier = Modifier.padding(vertical = 16.dp),
         ) {
             if (seasons.size > 1) {
                 val hasSeasonPosters = seasons.any { season ->
@@ -247,10 +253,10 @@ fun DetailSeriesContent(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     val seasonEpisodes = groupedEpisodes.getValue(seasonForContent)
-                    
+
                     EpisodeHorizontalRow(
                         episodes = seasonEpisodes,
                         maxWidthDp = containerWidthDp,
@@ -271,9 +277,18 @@ private fun SeasonViewModeToggle(
     onClick: () -> Unit,
 ) {
     val isPosters = mode == SeasonViewMode.Posters
+    val toggleInteractionSource = remember { MutableInteractionSource() }
+    val isTogglePressed by toggleInteractionSource.collectIsPressedAsState()
+    val toggleScale by animateFloatAsState(
+        targetValue = if (isTogglePressed) 0.96f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "TogglePressScale"
+    )
+
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .graphicsLayer(scaleX = toggleScale, scaleY = toggleScale)
+            .clip(RoundedCornerShape(MovieHubDimens.Radius.sm))
             .background(
                 if (isPosters) {
                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -282,12 +297,16 @@ private fun SeasonViewModeToggle(
                 },
             )
             .border(
-                width = 1.dp,
+                width = MovieHubDimens.Spacing.dp1,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = if (isPosters) 0.2f else 0.3f),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(MovieHubDimens.Radius.sm),
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .clickable(
+                interactionSource = toggleInteractionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = MovieHubDimens.Spacing.ms, vertical = MovieHubDimens.Spacing.xs),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -335,8 +354,17 @@ private fun SeasonTextChipScrollRow(
     ) {
         items(seasons, key = { season -> season }) { season ->
             val isSelected = season == currentSeason
+            val chipInteractionSource = remember { MutableInteractionSource() }
+            val isChipPressed by chipInteractionSource.collectIsPressedAsState()
+            val chipScale by animateFloatAsState(
+                targetValue = if (isChipPressed) 0.96f else 1.0f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "ChipPressScale_$season"
+            )
+
             Box(
                 modifier = Modifier
+                    .graphicsLayer(scaleX = chipScale, scaleY = chipScale)
                     .clip(RoundedCornerShape(sizing.seasonChipRadius))
                     .background(
                         if (isSelected) {
@@ -345,7 +373,11 @@ private fun SeasonTextChipScrollRow(
                             MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f)
                         },
                     )
-                    .clickable { onSelect(season) }
+                    .clickable(
+                        interactionSource = chipInteractionSource,
+                        indication = null,
+                        onClick = { onSelect(season) }
+                    )
                     .padding(
                         horizontal = sizing.seasonChipHorizontalPadding,
                         vertical = sizing.seasonChipVerticalPadding,
@@ -423,11 +455,25 @@ private fun SeasonPosterButton(
     sizing: SeriesContentSizing,
     onClick: () -> Unit,
 ) {
+    val posterInteractionSource = remember { MutableInteractionSource() }
+    val isPosterPressed by posterInteractionSource.collectIsPressedAsState()
+    val posterScale by animateFloatAsState(
+        targetValue = if (isPosterPressed) 0.96f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "SeasonPosterPressScale"
+    )
+
     Column(
         modifier = Modifier
             .width(sizing.seasonPosterWidth)
-            .clickable(onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .graphicsLayer(scaleX = posterScale, scaleY = posterScale)
+            .clip(RoundedCornerShape(sizing.seasonPosterRadius))
+            .clickable(
+                interactionSource = posterInteractionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
     ) {
         Box(
             modifier = Modifier
@@ -436,7 +482,7 @@ private fun SeasonPosterButton(
                 .clip(RoundedCornerShape(sizing.seasonPosterRadius))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .border(
-                    width = if (isSelected) 2.dp else 1.dp,
+                    width = if (isSelected) MovieHubDimens.Spacing.dp2 else MovieHubDimens.Spacing.dp1,
                     color = if (isSelected) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -451,7 +497,7 @@ private fun SeasonPosterButton(
                     contentDescription = label,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) }
+                    onLoading = { Box(Modifier.fillMaxSize().shimmerEffect()) },
                 )
             } else {
                 Box(
@@ -549,20 +595,31 @@ private fun EpisodeHorizontalCard(
     onClick: (() -> Unit)? = null,
 ) {
     val cardShape = RoundedCornerShape(metrics.cornerRadius)
+    val episodeInteractionSource = remember { MutableInteractionSource() }
+    val isEpisodePressed by episodeInteractionSource.collectIsPressedAsState()
+    val episodeScale by animateFloatAsState(
+        targetValue = if (isEpisodePressed && onClick != null) 0.96f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "EpisodePressScale"
+    )
+
     Box(
         modifier = Modifier
             .width(metrics.cardWidth)
             .height(metrics.cardHeight)
+            .graphicsLayer(scaleX = episodeScale, scaleY = episodeScale)
             .clip(cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             .border(
-                width = 1.dp,
+                width = MovieHubDimens.Spacing.dp1,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
                 shape = cardShape,
             )
-            .combinedClickable(
+            .clickable(
+                interactionSource = episodeInteractionSource,
+                indication = null,
                 enabled = onClick != null,
-                onClick = { onClick?.invoke() },
+                onClick = { onClick?.invoke() }
             ),
     ) {
         val imageUrl = video.thumbnail?.takeIf { it.isNotBlank() } ?: fallbackImage?.takeIf { it.isNotBlank() }
@@ -581,15 +638,15 @@ private fun EpisodeHorizontalCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = video.title.take(1),
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                         )
                     }
-                }
+                },
             )
         }
 
@@ -627,7 +684,7 @@ private fun EpisodeHorizontalCard(
             } else {
                 "Episode"
             }
-            
+
             EpisodeCodeBadge(
                 text = badgeText,
                 textSize = metrics.badgeTextSize,

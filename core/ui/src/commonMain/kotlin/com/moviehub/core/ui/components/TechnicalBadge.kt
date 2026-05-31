@@ -11,34 +11,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.moviehub.core.ui.theme.MovieHubDimens
 
 @Composable
 fun TechnicalBadge(
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    val accentPrimary = MaterialTheme.colorScheme.primary
+    val badgeShape = RoundedCornerShape(MovieHubDimens.Spacing.xxs)
+
     Surface(
         modifier = modifier
             .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(4.dp)
+                width = MovieHubDimens.Spacing.dp1,
+                color = accentPrimary.copy(alpha = 0.35f),
+                shape = badgeShape,
             ),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-        shape = RoundedCornerShape(4.dp)
+        color = accentPrimary.copy(alpha = 0.08f),
+        shape = badgeShape,
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            modifier = Modifier.padding(
+                horizontal = MovieHubDimens.Spacing.xs,
+                vertical = MovieHubDimens.Spacing.dp2
+            ),
         ) {
             Text(
                 text = text.uppercase(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
+                color = accentPrimary,
+                fontSize = MovieHubDimens.Font.xs,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
-                letterSpacing = 1.5.sp
+                letterSpacing = MovieHubDimens.Font.trackingUltraWide,
             )
         }
     }

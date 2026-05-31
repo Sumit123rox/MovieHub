@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import platform.Foundation.NSTimeInterval
 import platform.UIKit.UIDevice
 import kotlin.time.Duration.Companion.seconds
 
@@ -29,11 +28,11 @@ actual class PowerStateManager actual constructor(private val ctx: PlatformConte
 
     private fun refreshState(): PowerState {
         val device = UIDevice.currentDevice
-        val isPowerSave = platform.Foundation.NSProcessInfo.processInfo.isLowPowerModeEnabled
+        val isPowerSave = false // NSProcessInfo.processInfo.isLowPowerModeEnabled not in Kotlin/Native bindings
         val batteryLevel = device.batteryLevel.toFloat()
         return PowerState(
             isPowerSaveMode = isPowerSave,
-            batteryLevel = if (batteryLevel >= 0f) batteryLevel else 1f
+            batteryLevel = if (batteryLevel >= 0f) batteryLevel else 1f,
         )
     }
 }

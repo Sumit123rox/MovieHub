@@ -1,13 +1,12 @@
 package com.moviehub.core.database
 
 import androidx.room3.Entity
-import androidx.room3.PrimaryKey
 import com.moviehub.core.model.DownloadItem
 import com.moviehub.core.model.DownloadState
 
 @Entity(
     tableName = "downloads",
-    primaryKeys = ["id", "profileId"]
+    primaryKeys = ["id", "profileId"],
 )
 data class DownloadEntity(
     val id: String,
@@ -22,7 +21,7 @@ data class DownloadEntity(
     val progress: Float,
     val totalSize: Long,
     val downloadedSize: Long,
-    val createdAt: Long
+    val createdAt: Long,
 )
 
 fun DownloadEntity.toExternalModel() = DownloadItem(
@@ -38,7 +37,7 @@ fun DownloadEntity.toExternalModel() = DownloadItem(
     progress = progress,
     totalSize = totalSize,
     downloadedSize = downloadedSize,
-    createdAt = createdAt
+    createdAt = createdAt,
 )
 
 fun DownloadItem.toEntity() = DownloadEntity(
@@ -54,5 +53,5 @@ fun DownloadItem.toEntity() = DownloadEntity(
     progress = progress,
     totalSize = totalSize,
     downloadedSize = downloadedSize,
-    createdAt = createdAt
+    createdAt = createdAt,
 )

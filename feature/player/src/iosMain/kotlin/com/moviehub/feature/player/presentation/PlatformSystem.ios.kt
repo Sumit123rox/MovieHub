@@ -34,3 +34,6 @@ internal actual fun playerTimeMillis(): Long =
     (NSDate().timeIntervalSince1970 * 1000).toLong()
 
 actual val isIosPlatform: Boolean = true
+
+@Composable
+actual fun rememberIsInPipMode(): Boolean = false

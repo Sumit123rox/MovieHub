@@ -5,25 +5,33 @@ import com.moviehub.core.database.CacheService
 import com.moviehub.core.model.MediaItem
 import com.moviehub.core.model.MediaItemStore
 import com.moviehub.core.model.MetaResponse
+import com.moviehub.core.model.StreamItem
+import com.moviehub.core.network.AddonManager
 import com.moviehub.core.network.StremioApiClient
 import com.moviehub.core.network.mapper.toDomain
-import com.moviehub.core.model.StreamItem
-
-import com.moviehub.core.network.AddonManager
+import com.moviehub.core.network.scraper.PluginRepository
 import com.moviehub.core.network.scraper.ScraperManager
 import com.moviehub.core.network.tmdb.TmdbEnrichmentService
 import com.moviehub.core.network.tmdb.TmdbService
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 
 interface DetailsRepository {
     suspend fun getMediaDetails(id: String, type: String, addonUrl: String? = null): MediaItem?
     suspend fun getStreams(id: String, type: String): List<StreamItem>
-    fun getStreamsFlow(id: String, type: String): Flow<List<StreamItem>>
+    fun getStreamsFlow(id: String, type: String): Flow<StreamsEvent>
     suspend fun getStreamAddonCount(type: String): Int
 }
 
@@ -32,9 +40,14 @@ class DetailsRepositoryImpl(
     private val addonManager: AddonManager,
     private val scraperManager: ScraperManager,
     private val tmdbEnrichment: TmdbEnrichmentService,
+    private val pluginRepository: PluginRepository,
     private val cacheService: CacheService,
     private val json: Json,
 ) : DetailsRepository {
+
+    init {
+        pluginRepository.initialize()
+    }
 
     private val logger = Logger.withTag("DetailsRepository")
     private val metaSerializer = MetaResponse.serializer()
@@ -196,7 +209,7 @@ class DetailsRepositoryImpl(
                                 type = normalizedType,
                                 id = id,
                                 addonName = manifest.name,
-                                addonId = manifest.id
+                                addonId = manifest.id,
                             )
                         } catch (e: Exception) {
                             logger.w { "Stream addon ${manifest.name} failed: ${e.message}" }
@@ -240,22 +253,32 @@ class DetailsRepositoryImpl(
         merged
     }
 
-    override fun getStreamsFlow(id: String, type: String): Flow<List<StreamItem>> = channelFlow {
+    override fun getStreamsFlow(id: String, type: String): Flow<StreamsEvent> = channelFlow {
         val normalizedType = when (type.lowercase()) {
             "show", "tv", "series" -> "series"
             "movie" -> "movie"
             else -> type.lowercase()
         }
 
+        // 0. Warm up AddonManager and PluginRepository so they have loaded data for the active profile
+        addonManager.isLoaded.first { it }
+        pluginRepository.isInitialized.first { it }
+
         val parts = id.split(":")
         val imdbId = parts.getOrNull(0) ?: id
         val season = parts.getOrNull(1)?.toIntOrNull()
         val episode = parts.getOrNull(2)?.toIntOrNull()
 
+        val streamSerializer = com.moviehub.core.model.StremioStreamResponse.serializer()
+        val cacheKey = CacheService.streamKey(id, type)
+
+        // ── Shared mutable state (guarded by mutex) ──
         val seen = mutableSetOf<String>()
         val accumulated = mutableListOf<StreamItem>()
+        val allProviders = linkedMapOf<String, AddonStreamStatus>()
+        val mutex = Mutex()
 
-        fun addUnique(streams: List<StreamItem>) {
+        suspend fun addUnique(streams: List<StreamItem>) {
             streams.forEach { stream ->
                 val key = stream.url ?: stream.infoHash ?: "${stream.name}:${stream.description}"
                 if (key !in seen) {
@@ -265,65 +288,164 @@ class DetailsRepositoryImpl(
             }
         }
 
-        val streamSerializer = com.moviehub.core.model.StremioStreamResponse.serializer()
-        val cacheKey = CacheService.streamKey(id, type)
-
-        // PHASE 1: Emit cached streams immediately (offline-first)
+        // ═══════════════════════════════════════════
+        // PHASE 1: Emit cached streams (offline-first)
+        // ═══════════════════════════════════════════
         try {
             val cached = cacheService.getCachedParsed(cacheKey, streamSerializer)
             if (cached != null && cached.streams.isNotEmpty()) {
                 addUnique(cached.streams)
-                send(accumulated.toList())
-            } else {
-                send(emptyList())
+                send(StreamsEvent.CachedStreams(accumulated.toList()))
             }
-        } catch (e: Exception) {
-            send(emptyList())
-        }
+        } catch (_: Exception) { }
 
-        // PHASE 2: Process stream addons sequentially — emit after each one completes
+        // ═══════════════════════════════════════════
+        // PHASE 2: Build provider list
+        // ═══════════════════════════════════════════
         val streamAddons = addonManager.getAddonsProviding("stream", normalizedType)
-        for ((url, manifest) in streamAddons) {
-            try {
-                val streams = apiClient.getStreams(
-                    baseUrl = url,
-                    type = normalizedType,
-                    id = id,
-                    addonName = manifest.name,
-                    addonId = manifest.id
-                )
-                addUnique(streams)
-                send(accumulated.toList())
-            } catch (e: Exception) {
-                logger.w { "Stream addon ${manifest.name} failed: ${e.message}" }
-            }
+        val scrapers = scraperManager.getRegisteredScrapers()
+
+        streamAddons.forEach { (_, manifest) ->
+            allProviders[manifest.name] = AddonStreamStatus.Pending
+        }
+        scrapers.forEach { scraper ->
+            val label = "${scraper.name} (Plugin)"
+            allProviders[label] = AddonStreamStatus.Pending
         }
 
-        // PHASE 3: Process each scraper individually and emit after each one
-        val scrapers = scraperManager.getRegisteredScrapers()
-        if (scrapers.isNotEmpty()) {
-            logger.i { "Processing ${scrapers.size} registered scrapers for $id" }
-            for (scraper in scrapers) {
-                try {
-                    val scraperStreams = scraperManager.getStreamsFromScraper(
-                        scraperId = scraper.id,
-                        imdbId = imdbId,
-                        type = normalizedType,
-                        season = season,
-                        episode = episode,
+        if (allProviders.isEmpty()) {
+            send(StreamsEvent.Completed(accumulated.toList(), emptyMap()))
+            return@channelFlow
+        }
+
+        send(StreamsEvent.LoadingStarted(allProviders.toMap()))
+
+        // ═══════════════════════════════════════════
+        // PHASE 3: Parallel fetch — all addons + scrapers at once with semaphore throttling
+        // ═══════════════════════════════════════════
+        val perAddonTimeout = 15_000L
+        val semaphore = Semaphore(permits = 10)
+
+        supervisorScope {
+            // ── Launch all HTTP addon requests concurrently ──
+            val addonJobs = streamAddons.map { (url, manifest) ->
+                async {
+                    val providerName = manifest.name
+
+                    // Mark Fetching
+                    val initialStatusMap = mutex.withLock {
+                        allProviders[providerName] = AddonStreamStatus.Fetching
+                        allProviders.toMap()
+                    }
+                    send(
+                        StreamsEvent.ProviderStatusChanged(
+                            providerName, AddonStreamStatus.Fetching, initialStatusMap,
+                        ),
                     )
-                    addUnique(scraperStreams)
-                    send(accumulated.toList())
-                } catch (e: Exception) {
-                    logger.w { "Scraper ${scraper.name} failed: ${e.message}" }
+
+                    try {
+                        val streams = semaphore.withPermit {
+                            withTimeout(perAddonTimeout) {
+                                apiClient.getStreams(
+                                    baseUrl = url,
+                                    type = normalizedType,
+                                    id = id,
+                                    addonName = manifest.name,
+                                    addonId = manifest.id,
+                                )
+                            }
+                        }
+                        mutex.withLock {
+                            addUnique(streams)
+                            allProviders[providerName] = AddonStreamStatus.Completed(streams.size)
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        logger.w { "Stream addon $providerName timed out after ${perAddonTimeout}ms" }
+                        mutex.withLock {
+                            allProviders[providerName] = AddonStreamStatus.TimedOut(perAddonTimeout)
+                        }
+                    } catch (e: Exception) {
+                        logger.w { "Stream addon $providerName failed: ${e.message}" }
+                        mutex.withLock {
+                            allProviders[providerName] = AddonStreamStatus.Failed(e.message)
+                        }
+                    }
+
+                    // Emit status update + current streams (without holding mutex to avoid channel flow deadlocks)
+                    val (finalStatus, finalMap, finalStreams) = mutex.withLock {
+                        Triple(allProviders[providerName]!!, allProviders.toMap(), accumulated.toList())
+                    }
+                    send(StreamsEvent.ProviderStatusChanged(providerName, finalStatus, finalMap))
+                    send(StreamsEvent.StreamsUpdated(finalStreams))
                 }
             }
+
+            // ── Launch all scraper requests concurrently ──
+            val scraperJobs = scrapers.map { scraper ->
+                async {
+                    val providerName = "${scraper.name} (Plugin)"
+
+                    // Mark Fetching
+                    val initialStatusMap = mutex.withLock {
+                        allProviders[providerName] = AddonStreamStatus.Fetching
+                        allProviders.toMap()
+                    }
+                    send(
+                        StreamsEvent.ProviderStatusChanged(
+                            providerName, AddonStreamStatus.Fetching, initialStatusMap,
+                        ),
+                    )
+
+                    try {
+                        val scraperStreams = semaphore.withPermit {
+                            withTimeout(perAddonTimeout) {
+                                scraperManager.getStreamsFromScraper(
+                                    scraperId = scraper.id,
+                                    imdbId = imdbId,
+                                    type = normalizedType,
+                                    season = season,
+                                    episode = episode,
+                                )
+                            }
+                        }
+                        mutex.withLock {
+                            addUnique(scraperStreams)
+                            allProviders[providerName] = AddonStreamStatus.Completed(scraperStreams.size)
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        logger.w { "Scraper $providerName timed out after ${perAddonTimeout}ms" }
+                        mutex.withLock {
+                            allProviders[providerName] = AddonStreamStatus.TimedOut(perAddonTimeout)
+                        }
+                    } catch (e: Exception) {
+                        logger.w { "Scraper $providerName failed: ${e.message}" }
+                        mutex.withLock {
+                            allProviders[providerName] = AddonStreamStatus.Failed(e.message)
+                        }
+                    }
+
+                    // Emit status update + current streams (without holding mutex to avoid channel flow deadlocks)
+                    val (finalStatus, finalMap, finalStreams) = mutex.withLock {
+                        Triple(allProviders[providerName]!!, allProviders.toMap(), accumulated.toList())
+                    }
+                    send(StreamsEvent.ProviderStatusChanged(providerName, finalStatus, finalMap))
+                    send(StreamsEvent.StreamsUpdated(finalStreams))
+                }
+            }
+
+            // Wait for ALL providers to finish (or timeout/fail)
+            (addonJobs + scraperJobs).awaitAll()
         }
 
-        logger.i { "StreamsFlow resolved ${accumulated.size} unique streams for $id (${streamAddons.size} addons, ${scrapers.size} scrapers)" }
+        logger.i { "StreamsFlow resolved ${accumulated.size} unique streams (${allProviders.size} providers)" }
 
         // Cache the final merged result
-        cacheService.putCache(cacheKey, "stream", json.encodeToString(streamSerializer, com.moviehub.core.model.StremioStreamResponse(streams = accumulated)))
+        cacheService.putCache(
+            cacheKey, "stream",
+            json.encodeToString(streamSerializer, com.moviehub.core.model.StremioStreamResponse(streams = accumulated)),
+        )
+
+        send(StreamsEvent.Completed(accumulated.toList(), allProviders.toMap()))
     }
 
     private fun mergeStreams(directPlay: List<StreamItem>, torrent: List<StreamItem>): List<StreamItem> {
@@ -349,6 +471,9 @@ class DetailsRepositoryImpl(
             "movie" -> "movie"
             else -> type.lowercase()
         }
+        // Wait until AddonManager and PluginRepository have finished loading active profile data
+        addonManager.isLoaded.first { it }
+        pluginRepository.isInitialized.first { it }
         val addonCount = addonManager.getAddonsProviding("stream", normalizedType).size
         val scraperCount = scraperManager.getRegisteredScrapers().size
         return addonCount + scraperCount

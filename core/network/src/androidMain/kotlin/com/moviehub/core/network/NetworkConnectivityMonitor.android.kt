@@ -1,5 +1,6 @@
 package com.moviehub.core.network
 
+import android.Manifest
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -12,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 actual class NetworkConnectivityMonitor actual constructor(ctx: PlatformContext) {
     private val connectivityManager =
-        (ctx as Context).getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     private val _isOnline = MutableStateFlow(checkCurrentConnectivity())
     actual val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
