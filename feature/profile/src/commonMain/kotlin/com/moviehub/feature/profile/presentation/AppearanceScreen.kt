@@ -53,18 +53,9 @@ fun AppearanceScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Appearance", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                ),
+            com.moviehub.core.ui.components.MovieHubTopBar(
+                title = "Appearance",
+                onBackClick = onBackClick,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,

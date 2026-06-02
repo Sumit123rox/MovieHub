@@ -65,8 +65,17 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
         viewModelScope.launch {
             PerformanceMonitor.beginSection("VM:Addon:refreshAddon")
             try {
+                _state.value = _state.value.copy(
+                    refreshingAddonIds = _state.value.refreshingAddonIds + addonId,
+                    error = null
+                )
                 repository.fetchAddonManifest(url)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = "Refresh failed: ${e.message}")
             } finally {
+                _state.value = _state.value.copy(
+                    refreshingAddonIds = _state.value.refreshingAddonIds - addonId
+                )
                 PerformanceMonitor.endSection()
             }
         }
@@ -86,6 +95,8 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
         }
     }
 
+    private var hasCheckedUpdates = false
+
     private fun loadInstalledAddons() {
         viewModelScope.launch {
             PerformanceMonitor.beginSection("VM:Addon:loadInstalledAddons")
@@ -99,9 +110,44 @@ class AddonViewModel(private val repository: AddonRepository) : ViewModel() {
                         }
                     }
                     _state.value = _state.value.copy(installedAddons = sorted, addonUrls = urls)
+                    
+                    if (!hasCheckedUpdates && sorted.isNotEmpty()) {
+                        hasCheckedUpdates = true
+                        checkForUpdates(sorted)
+                    }
                 }
             } finally {
                 PerformanceMonitor.endSection()
+            }
+        }
+    }
+
+    private fun checkForUpdates(addons: List<com.moviehub.core.model.StremioManifest>) {
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            var updatedCount = 0
+            addons.forEach { addon ->
+                val url = repository.getAddonUrl(addon.id) ?: return@forEach
+                runCatching {
+                    val result = repository.fetchAddonManifest(url)
+                    if (result.isSuccess) {
+                        val newManifest = result.getOrNull()
+                        if (newManifest != null && newManifest.version != addon.version) {
+                            updatedCount++
+                        }
+                    }
+                }
+            }
+            if (updatedCount > 0) {
+                _state.value = _state.value.copy(
+                    successMessage = "$updatedCount providers have been automatically updated."
+                )
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(5000)
+                    if (_state.value.successMessage?.contains("automatically updated") == true) {
+                        _state.value = _state.value.copy(successMessage = null)
+                    }
+                }
             }
         }
     }

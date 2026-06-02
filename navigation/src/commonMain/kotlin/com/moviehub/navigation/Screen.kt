@@ -40,7 +40,13 @@ sealed interface Screen {
     data class Catalog(val title: String, val type: String, val catalogId: String, val addonId: String? = null) : Screen
 
     @Serializable
-    data class Streams(val id: String, val type: String, val mediaId: String) : Screen
+    data class Streams(
+        val id: String,
+        val type: String,
+        val mediaId: String,
+        val title: String? = null,
+        val backdropUrl: String? = null,
+    ) : Screen
 
     @Serializable
     data object Downloads : Screen

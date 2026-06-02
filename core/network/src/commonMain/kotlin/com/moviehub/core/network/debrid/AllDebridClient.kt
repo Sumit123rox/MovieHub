@@ -9,6 +9,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * AllDebrid (alldebrid.com) client — same pattern as RealDebridClient.
@@ -65,7 +66,7 @@ class AllDebridClient(
 
             while (attempts < maxAttempts) {
                 attempts++
-                delay(2000)
+                delay(2000.milliseconds)
 
                 val statusRespText = httpClient.get("https://api.alldebrid.com/v4.1/magnet/status") {
                     parameter("agent", "MovieHub")

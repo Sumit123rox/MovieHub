@@ -21,6 +21,7 @@ import com.moviehub.core.utils.currentTimeMillis
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.*
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,7 +76,7 @@ class SyncManager(
 
         // Periodic cache eviction
         scope.launch {
-            delay(30_000L)
+            delay(30_000.milliseconds)
             while (isActive) {
                 try {
                     if (!powerStateManager.state.value.isPowerSaveMode) {
@@ -85,13 +86,13 @@ class SyncManager(
                 } catch (e: Exception) {
                     Logger.withTag("SyncManager").e(e) { "Cache eviction failed" }
                 }
-                delay(if (powerStateManager.state.value.isPowerSaveMode) 30 * 60 * 1000L else 15 * 60 * 1000L)
+                delay((if (powerStateManager.state.value.isPowerSaveMode) 30 * 60 * 1000L else 15 * 60 * 1000L).milliseconds)
             }
         }
 
         // Background catalog prefetch
         scope.launch {
-            delay(5_000L)
+            delay(5_000.milliseconds)
             while (isActive) {
                 try {
                     if (!powerStateManager.state.value.isPowerSaveMode && networkMonitor.isOnlineNow) {
@@ -100,7 +101,7 @@ class SyncManager(
                 } catch (e: Exception) {
                     Logger.withTag("SyncManager").e(e) { "Catalog prefetch failed" }
                 }
-                delay(if (powerStateManager.state.value.isPowerSaveMode) 30 * 60 * 1000L else 10 * 60 * 1000L)
+                delay((if (powerStateManager.state.value.isPowerSaveMode) 30 * 60 * 1000L else 10 * 60 * 1000L).milliseconds)
             }
         }
     }

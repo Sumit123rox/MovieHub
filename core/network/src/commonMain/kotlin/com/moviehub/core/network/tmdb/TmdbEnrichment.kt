@@ -248,10 +248,19 @@ class TmdbEnrichmentService(
                 else -> null
             }
         }
+        val externalIdsDef = async {
+            if (mediaType == "tv") {
+                tmdbService.getExternalIds(tmdbId, "tv")
+            } else {
+                null
+            }
+        }
 
         val details = detailsDef.await()
         val credits = creditsDef.await()
         val ageRatingResponse = ageRatingDef.await()
+        val externalIds = externalIdsDef.await()
+        val resolvedImdbId = media.imdbId ?: externalIds?.imdbId
 
         // Age rating
         val ageRating = when {
@@ -323,19 +332,34 @@ class TmdbEnrichmentService(
         }
 
         // Cast photos + TMDB ID enrichment
-        val enrichedCast = if (media.cast.isNotEmpty() && credits != null) {
-            val tmdbCastMap = credits.cast
-                .filter { it.profilePath != null || it.id > 0 }
-                .groupBy { it.name.lowercase() }
-                .mapValues { (_, members) -> members.first() }
+        val enrichedCast = if (credits != null) {
+            if (media.cast.isNotEmpty()) {
+                val tmdbCastMap = credits.cast
+                    .filter { it.profilePath != null || it.id > 0 }
+                    .groupBy { it.name.lowercase() }
+                    .mapValues { (_, members) -> members.first() }
 
-            media.cast.map { person ->
-                tmdbCastMap[person.name.lowercase()]?.let { tmdbPerson ->
-                    person.copy(
-                        photo = TmdbImageUrl.profile(tmdbPerson.profilePath) ?: person.photo,
-                        tmdbId = if (tmdbPerson.id > 0) tmdbPerson.id else person.tmdbId,
-                    )
-                } ?: person
+                media.cast.map { person ->
+                    tmdbCastMap[person.name.lowercase()]?.let { tmdbPerson ->
+                        person.copy(
+                            photo = TmdbImageUrl.profile(tmdbPerson.profilePath) ?: person.photo,
+                            tmdbId = if (tmdbPerson.id > 0) tmdbPerson.id else person.tmdbId,
+                            role = person.role ?: tmdbPerson.character,
+                        )
+                    } ?: person
+                }
+            } else {
+                credits.cast
+                    .sortedBy { it.order }
+                    .take(20)
+                    .map { tmdbPerson ->
+                        MediaPerson(
+                            name = tmdbPerson.name,
+                            role = tmdbPerson.character,
+                            photo = TmdbImageUrl.profile(tmdbPerson.profilePath),
+                            tmdbId = tmdbPerson.id,
+                        )
+                    }
             }
         } else {
             media.cast
@@ -470,7 +494,15 @@ class TmdbEnrichmentService(
             },
         )
 
+        val voteCount = media.voteCount ?: (details as? TmdbMovieDetails)?.voteCount ?: (details as? TmdbTvDetails)?.voteCount
+        val popularity = media.popularity ?: (details as? TmdbMovieDetails)?.popularity ?: (details as? TmdbTvDetails)?.popularity
+        val budget = media.budget ?: (details as? TmdbMovieDetails)?.budget
+        val revenue = media.revenue ?: (details as? TmdbMovieDetails)?.revenue
+        val originalTitle = media.originalTitle ?: (details as? TmdbMovieDetails)?.originalTitle ?: (details as? TmdbTvDetails)?.originalName
+        val releaseDate = media.releaseDate ?: (details as? TmdbMovieDetails)?.releaseDate ?: (details as? TmdbTvDetails)?.firstAirDate
+
         media.copy(
+            imdbId = resolvedImdbId,
             rating = rating,
             runtime = runtime,
             ageRating = ageRating,
@@ -488,6 +520,12 @@ class TmdbEnrichmentService(
             moreLikeThis = moreLikeThis,
             posterUrl = enrichedPosterUrl,
             backgroundUrl = enrichedBackgroundUrl,
+            voteCount = voteCount,
+            popularity = popularity,
+            budget = budget,
+            revenue = revenue,
+            originalTitle = originalTitle,
+            releaseDate = releaseDate,
         )
     }
 

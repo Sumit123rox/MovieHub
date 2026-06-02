@@ -66,6 +66,7 @@ import com.moviehub.core.ui.theme.MovieHubDimens
 import com.moviehub.feature.player.presentation.components.PlayerControls
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
+import io.ktor.client.request.request
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
@@ -78,6 +79,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 expect fun VideoPlayer(
@@ -139,7 +141,21 @@ fun PlayerScreen(
     LaunchedEffect(mediaId) {
         activeMediaId = mediaId
     }
-    LaunchedEffect(title) {
+    LaunchedEffect(activeMediaId, title) {
+        val mediaIdVal = activeMediaId ?: ""
+        if (mediaIdVal.contains(":")) {
+            val parts = mediaIdVal.split(":")
+            val season = parts.getOrNull(1)?.toIntOrNull()
+            val episode = parts.getOrNull(2)?.toIntOrNull()
+            if (season != null && episode != null) {
+                activeTitle = if (title.isNotBlank() && title != "Playing...") {
+                    "$title - S$season E$episode"
+                } else {
+                    "Season $season Episode $episode"
+                }
+                return@LaunchedEffect
+            }
+        }
         activeTitle = title
     }
 
@@ -150,55 +166,18 @@ fun PlayerScreen(
 
     LaunchedEffect(optimisticIsPlaying) {
         if (optimisticIsPlaying != null) {
-            kotlinx.coroutines.delay(1500)
+            kotlinx.coroutines.delay(1500.milliseconds)
             optimisticIsPlaying = null
         }
     }
 
     val playerController: MoviePlayerController = koinInject()
 
-    LaunchedEffect(requestedAction) {
-        requestedAction?.let { action ->
-            when (action) {
-                is PlayerAction.Play -> playerController.play()
-                is PlayerAction.Pause -> playerController.pause()
-                is PlayerAction.SeekTo -> playerController.seekTo(action.positionMs)
-                is PlayerAction.SetSpeed -> playerController.setSpeed(action.speed)
-                is PlayerAction.SetVolume -> playerController.setVolume(action.volume)
-                is PlayerAction.SelectAudioTrack -> {
-                    val flatIndex = playbackState.audioTracks.indexOfFirst {
-                        it.index == action.groupIndex && it.id == action.trackIndex.toString()
-                    }
-                    if (flatIndex != -1) playerController.selectAudioTrack(flatIndex)
-                }
+    var preferredAudioLanguage by remember { mutableStateOf<String?>(null) }
+    var preferredSubtitleLanguage by remember { mutableStateOf<String?>(null) }
+    var subtitlesEnabled by remember { mutableStateOf(true) }
+    var preferredVideoHeight by remember { mutableIntStateOf(0) }
 
-                is PlayerAction.SelectSubtitleTrack -> {
-                    if (action.groupIndex == -1) {
-                        playerController.selectSubtitleTrack(-1)
-                    } else {
-                        val flatIndex = playbackState.subtitleTracks.indexOfFirst {
-                            it.index == action.groupIndex && it.id == action.trackIndex.toString()
-                        }
-                        if (flatIndex != -1) playerController.selectSubtitleTrack(flatIndex)
-                    }
-                }
-
-                is PlayerAction.SelectVideoTrack -> {
-                    val flatIndex = playbackState.videoTracks.indexOfFirst {
-                        it.index == action.groupIndex && it.id == action.trackIndex.toString()
-                    }
-                    if (flatIndex != -1) playerController.selectVideoTrack(flatIndex)
-                }
-
-                is PlayerAction.SetScale -> playerController.setVideoScale(action.scale)
-                is PlayerAction.ResetZoom -> playerController.setVideoScale(VideoScale.FIT)
-                is PlayerAction.EnterPip -> playerController.enterPip()
-                else -> { // no-op
-                }
-            }
-            requestedAction = null
-        }
-    }
     val isInPip = rememberIsInPipMode()
     var lastSeekTime by remember { mutableStateOf(0L) }
     var isControlsVisible by remember { mutableStateOf(true) }
@@ -232,6 +211,7 @@ fun PlayerScreen(
     var isSettingsSheetOpen by remember { mutableStateOf(false) }
     var sleepTimerRemainingMs by remember { mutableStateOf<Long?>(null) }
     var subtitleStyle by remember { mutableStateOf(SubtitleStyle()) }
+    var saveSubtitlesGlobally by remember { mutableStateOf(true) }
     val posterResource = if (posterUrl != null) asyncPainterResource(data = posterUrl) else null
     var hasTriggeredAutoPlay by remember { mutableStateOf(false) }
     var retryTrigger by remember { mutableStateOf(0) }
@@ -255,6 +235,110 @@ fun PlayerScreen(
     val scope = rememberCoroutineScope()
 
     val playbackPreferences by playbackPrefsRepository.getPreferencesFlow().collectAsState(com.moviehub.core.database.PlaybackPreferences())
+
+    LaunchedEffect(playbackPreferences) {
+        preferredAudioLanguage = playbackPreferences.preferredAudioLanguage
+        preferredSubtitleLanguage = playbackPreferences.preferredSubtitleLanguage
+        subtitlesEnabled = playbackPreferences.subtitlesEnabled
+        preferredVideoHeight = playbackPreferences.preferredVideoHeight
+    }
+
+    LaunchedEffect(requestedAction) {
+        requestedAction?.let { action ->
+            when (action) {
+                is PlayerAction.Play -> playerController.play()
+                is PlayerAction.Pause -> playerController.pause()
+                is PlayerAction.SeekTo -> playerController.seekTo(action.positionMs)
+                is PlayerAction.SetSpeed -> playerController.setSpeed(action.speed)
+                is PlayerAction.SetVolume -> playerController.setVolume(action.volume)
+                is PlayerAction.SelectAudioTrack -> {
+                    val flatIndex = playbackState.audioTracks.indexOfFirst {
+                        it.index == action.groupIndex && it.id == action.trackIndex.toString()
+                    }
+                    if (flatIndex != -1) {
+                        playerController.selectAudioTrack(flatIndex)
+                        val track = playbackState.audioTracks[flatIndex]
+                        preferredAudioLanguage = track.language ?: track.label
+                        currentAudioGroupIndex = action.groupIndex
+                        currentAudioTrackIndex = action.trackIndex
+                        scope.launch {
+                            playbackPrefsRepository.updatePreferences(
+                                playbackPreferences.copy(preferredAudioLanguage = preferredAudioLanguage),
+                            )
+                        }
+                    }
+                }
+
+                is PlayerAction.SelectSubtitleTrack -> {
+                    if (action.groupIndex == -1) {
+                        playerController.selectSubtitleTrack(-1)
+                        subtitlesEnabled = false
+                        currentSubtitleGroupIndex = -1
+                        currentSubtitleTrackIndex = -1
+                        scope.launch {
+                            playbackPrefsRepository.updatePreferences(
+                                playbackPreferences.copy(subtitlesEnabled = false),
+                            )
+                        }
+                    } else {
+                        val flatIndex = playbackState.subtitleTracks.indexOfFirst {
+                            it.index == action.groupIndex && it.id == action.trackIndex.toString()
+                        }
+                        if (flatIndex != -1) {
+                            playerController.selectSubtitleTrack(flatIndex)
+                            subtitlesEnabled = true
+                            val track = playbackState.subtitleTracks[flatIndex]
+                            preferredSubtitleLanguage = track.language ?: track.label
+                            currentSubtitleGroupIndex = action.groupIndex
+                            currentSubtitleTrackIndex = action.trackIndex
+                            scope.launch {
+                                playbackPrefsRepository.updatePreferences(
+                                    playbackPreferences.copy(
+                                        subtitlesEnabled = true,
+                                        preferredSubtitleLanguage = preferredSubtitleLanguage,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                is PlayerAction.SelectVideoTrack -> {
+                    // Close settings sheet and show loading — track switch takes a moment
+                    isSettingsSheetOpen = false
+                    isChangingVideoTrack = true
+                    if (action.groupIndex == -1 && action.trackIndex == -1) {
+                        playerController.selectVideoTrack(-1)
+                        preferredVideoHeight = -1
+                        scope.launch {
+                            playbackPrefsRepository.updatePreferences(
+                                playbackPreferences.copy(preferredVideoHeight = -1),
+                            )
+                        }
+                    } else {
+                        val flatIndex = playbackState.videoTracks.indexOfFirst {
+                            it.index == action.groupIndex && it.id == action.trackIndex.toString()
+                        }
+                        if (flatIndex != -1) {
+                            playerController.selectVideoTrack(flatIndex)
+                            val track = playbackState.videoTracks[flatIndex]
+                            preferredVideoHeight = track.height
+                            scope.launch {
+                                playbackPrefsRepository.updatePreferences(
+                                    playbackPreferences.copy(preferredVideoHeight = track.height),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                is PlayerAction.SetScale -> playerController.setVideoScale(action.scale)
+                is PlayerAction.ResetZoom -> playerController.setVideoScale(VideoScale.FIT)
+                is PlayerAction.EnterPip -> playerController.enterPip()
+            }
+            requestedAction = null
+        }
+    }
 
     var showAutoPlayCountdown by remember { mutableStateOf(false) }
     var autoPlayCountdownSeconds by remember { mutableIntStateOf(10) }
@@ -288,7 +372,7 @@ fun PlayerScreen(
             )
             activeStream = resolvedStream
             activeMediaId = nextEpisodeId
-            activeTitle = "Season $season Episode ${episode + 1}"
+            activeTitle = if (title.isNotBlank() && title != "Playing...") "$title - S$season E${episode + 1}" else "Season $season Episode ${episode + 1}"
 
             // Reset binge conditions for next loop
             nextEpisodeStream = null
@@ -340,6 +424,44 @@ fun PlayerScreen(
                 streams
             }
         }
+    }
+
+    // ── Silent auto-switch: when a stream errors, try the next one automatically ──
+    val triedSources = remember { mutableSetOf<String>() }
+    LaunchedEffect(playbackState.error, sortedStreams) {
+        val error = playbackState.error
+        if (error != null && sortedStreams.isNotEmpty()) {
+            // Mark current source as tried
+            val currentKey = activeStream.url ?: activeStream.infoHash ?: activeStream.name
+            if (currentKey != null) triedSources.add(currentKey)
+
+            // Find next untried source
+            val nextSource = sortedStreams.firstOrNull { stream ->
+                val key = stream.url ?: stream.infoHash ?: stream.name
+                key != null && key !in triedSources
+            }
+
+            if (nextSource != null && (nextSource.url != null || nextSource.infoHash != null || nextSource.externalUrl != null)) {
+                delay(500.milliseconds)
+                feedbackMessage = "Switching source..."
+                activeStream = nextSource
+                playbackState = playbackState.copy(error = null, isLoading = true)
+                showLoading = true
+                hasStartedPlaying = false
+                hasSavedHistory = false
+            } else {
+                // All sources exhausted — auto-close
+                feedbackMessage = "No playable source found"
+                delay(1500.milliseconds)
+                unlockOrientation()
+                onBackClick()
+            }
+        }
+    }
+
+    // Reset tried sources when streams list changes (new content)
+    LaunchedEffect(streams) {
+        triedSources.clear()
     }
 
     // Format video resolution string for the info badges
@@ -429,10 +551,17 @@ fun PlayerScreen(
     // Smart status bar — dark icons for player's black background
     SmartStatusBar(isDark = true, color = Color.Black)
 
-    // Intercept system back button — delegate to navigation popBackStack
-    PlayerBackHandler(enabled = true, onBack = onBackClick)
+    // Restore orientation BEFORE navigating back — DisposableEffect doesn't fire
+    // on back navigation because Compose Navigation keeps the screen composed
+    val exitPlayer: () -> Unit = {
+        unlockOrientation()
+        onBackClick()
+    }
 
-    // Unlock orientation when leaving the player
+    // Intercept system back button
+    PlayerBackHandler(enabled = true, onBack = exitPlayer)
+
+    // Safety net: also unlock on actual disposal (process death, activity recreation)
     DisposableEffect(Unit) {
         onDispose { unlockOrientation() }
     }
@@ -457,7 +586,7 @@ fun PlayerScreen(
         val profileId = profileRepository.activeProfile.value?.id ?: return@LaunchedEffect
         val videoId = activeMediaId ?: return@LaunchedEffect
         val progress = watchProgressDao.getProgress(videoId, profileId).firstOrNull()
-        if (progress != null && !progress.isWatched) {
+        if (progress != null && !progress.isWatched && playbackPreferences.resumePlayback) {
             // Restore playback position (if > 5 seconds)
             if (progress.progressMs > 5_000) {
                 pendingSeekPosition = progress.progressMs
@@ -465,14 +594,14 @@ fun PlayerScreen(
             }
             // Restore audio track preference (best-effort)
             if (progress.audioGroupIndex >= 0 && playbackState.audioTracks.isNotEmpty()) {
-                delay(200)
+                delay(200.milliseconds)
                 requestedAction = PlayerAction.SelectAudioTrack(progress.audioGroupIndex, progress.audioTrackIndex)
                 currentAudioGroupIndex = progress.audioGroupIndex
                 currentAudioTrackIndex = progress.audioTrackIndex
             }
             // Restore subtitle track preference (best-effort)
             if (progress.subtitleGroupIndex != -2 && playbackState.subtitleTracks.isNotEmpty()) {
-                delay(200)
+                delay(200.milliseconds)
                 requestedAction = PlayerAction.SelectSubtitleTrack(progress.subtitleGroupIndex, progress.subtitleTrackIndex)
                 currentSubtitleGroupIndex = progress.subtitleGroupIndex
                 currentSubtitleTrackIndex = progress.subtitleTrackIndex
@@ -507,11 +636,90 @@ fun PlayerScreen(
         }
     }
 
+    var hasAppliedPreferencesForCurrentSource by remember { mutableStateOf(false) }
+
+    LaunchedEffect(activeStream) {
+        hasAppliedPreferencesForCurrentSource = false
+    }
+
+    LaunchedEffect(
+        hasAppliedPreferencesForCurrentSource,
+        playbackState.audioTracks,
+        playbackState.subtitleTracks,
+        playbackState.videoTracks,
+        playbackState.durationMs,
+    ) {
+        if (!hasAppliedPreferencesForCurrentSource && playbackState.durationMs > 0) {
+            // 1. Audio track migration
+            val prefAudio = preferredAudioLanguage
+            if (prefAudio != null && playbackState.audioTracks.isNotEmpty()) {
+                val match = playbackState.audioTracks.firstOrNull { track ->
+                    val lang = track.language ?: track.label
+                    lang.take(2).lowercase() == prefAudio.take(2).lowercase() ||
+                        track.label.contains(prefAudio, ignoreCase = true) ||
+                        prefAudio.contains(track.label, ignoreCase = true)
+                }
+                if (match != null && !match.isSelected) {
+                    requestedAction = PlayerAction.SelectAudioTrack(match.index, match.id.toIntOrNull() ?: 0)
+                }
+            }
+
+            // 2. Subtitle track migration
+            if (!subtitlesEnabled) {
+                if (playbackState.subtitleTracks.any { it.isSelected }) {
+                    requestedAction = PlayerAction.SelectSubtitleTrack(-1, -1)
+                }
+            } else {
+                val prefSub = preferredSubtitleLanguage
+                if (prefSub != null && playbackState.subtitleTracks.isNotEmpty()) {
+                    val match = playbackState.subtitleTracks.firstOrNull { track ->
+                        val lang = track.language ?: track.label
+                        lang.take(2).lowercase() == prefSub.take(2).lowercase() ||
+                            track.label.contains(prefSub, ignoreCase = true) ||
+                            prefSub.contains(track.label, ignoreCase = true)
+                    }
+                    if (match != null && !match.isSelected) {
+                        requestedAction = PlayerAction.SelectSubtitleTrack(match.index, match.id.toIntOrNull() ?: 0)
+                    }
+                }
+            }
+
+            // 3. Video quality migration
+            val prefHeight = preferredVideoHeight
+            if (prefHeight > 0 && playbackState.videoTracks.isNotEmpty()) {
+                val bestMatch = playbackState.videoTracks
+                    .filter { it.height > 0 }
+                    .minByOrNull { kotlin.math.abs(it.height - prefHeight) }
+
+                if (bestMatch != null && !bestMatch.isSelected) {
+                    requestedAction = PlayerAction.SelectVideoTrack(bestMatch.index, bestMatch.id.toIntOrNull() ?: 0)
+                }
+            }
+
+            hasAppliedPreferencesForCurrentSource = true
+        }
+    }
+
+    var wasPlayingBeforeSheetOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(isSettingsSheetOpen) {
+        if (isSettingsSheetOpen) {
+            wasPlayingBeforeSheetOpen = playbackState.isPlaying
+            if (playbackState.isPlaying) {
+                requestedAction = PlayerAction.Pause
+            }
+        } else {
+            if (wasPlayingBeforeSheetOpen) {
+                requestedAction = PlayerAction.Play
+                wasPlayingBeforeSheetOpen = false
+            }
+        }
+    }
+
     // Persist progress every 15 seconds while playing (repeating, not one-shot)
     val periodicSaveScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         while (isActive) {
-            delay(15000)
+            delay(15000.milliseconds)
             // Only save progress when ALL values are valid — prevents saving
             // WatchProgress(durationMs=0) which causes HomeScreen to show
             // spurious "watched" + "<1 min left" states.
@@ -630,7 +838,7 @@ fun PlayerScreen(
     // Auto-hide controls (resets on user interaction via interactionTick)
     LaunchedEffect(isControlsVisible, playbackState.isPlaying, interactionTick) {
         if (isControlsVisible && playbackState.isPlaying && !isSettingsSheetOpen) {
-            delay(3000)
+            delay(3000.milliseconds)
             isControlsVisible = false
         }
     }
@@ -638,7 +846,7 @@ fun PlayerScreen(
     // Auto-clear feedback messages after 2 seconds
     LaunchedEffect(feedbackMessage) {
         if (feedbackMessage != null) {
-            delay(2000)
+            delay(2000.milliseconds)
             feedbackMessage = null
         }
     }
@@ -646,7 +854,7 @@ fun PlayerScreen(
     // Auto-clear seek indicator after 800ms
     LaunchedEffect(seekIndicatorText) {
         if (seekIndicatorText != null) {
-            delay(800)
+            delay(800.milliseconds)
             seekIndicatorText = null
         }
     }
@@ -662,7 +870,7 @@ fun PlayerScreen(
             }
 
             else -> {
-                delay(1000)
+                delay(1000.milliseconds)
                 sleepTimerRemainingMs = remaining - 1000
             }
         }
@@ -734,12 +942,14 @@ fun PlayerScreen(
                             val urlToWarm = resolved.url ?: resolved.externalUrl
                             if (!urlToWarm.isNullOrBlank()) {
                                 withContext(Dispatchers.IO) {
-                                    val headRequest = okhttp3.Request.Builder()
-                                        .url(urlToWarm)
-                                        .head()
-                                        .build()
-                                    // Make a simple client to ping head
-                                    okhttp3.OkHttpClient().newCall(headRequest).execute().close()
+                                    val client = io.ktor.client.HttpClient()
+                                    try {
+                                        client.request(urlToWarm) {
+                                            method = io.ktor.http.HttpMethod.Head
+                                        }
+                                    } finally {
+                                        client.close()
+                                    }
                                 }
                             }
                         } catch (_: Exception) {
@@ -767,7 +977,7 @@ fun PlayerScreen(
     LaunchedEffect(showAutoPlayCountdown) {
         if (showAutoPlayCountdown) {
             while (autoPlayCountdownSeconds > 0 && showAutoPlayCountdown) {
-                delay(1000)
+                delay(1000.milliseconds)
                 autoPlayCountdownSeconds--
             }
             if (autoPlayCountdownSeconds == 0 && showAutoPlayCountdown) {
@@ -780,12 +990,12 @@ fun PlayerScreen(
     LaunchedEffect(mediaType, isSeriesEpisode) {
         if (mediaType != "movie" || isSeriesEpisode) return@LaunchedEffect
         while (isActive) {
-            delay(1000)
+            delay(1000.milliseconds)
             if (playbackState.durationMs > 0 &&
                 playbackState.currentPositionMs >= playbackState.durationMs * 0.95
             ) {
-                delay(2000) // Small grace period before auto-exit
-                onBackClick()
+                delay(2000.milliseconds) // Small grace period before auto-exit
+                exitPlayer()
                 break
             }
         }
@@ -794,25 +1004,37 @@ fun PlayerScreen(
     // Auto-dismiss transient volume/brightness indicators after 1.5s of inactivity
     LaunchedEffect(transientVolume, transientBrightness) {
         if (transientVolume != null || transientBrightness != null) {
-            delay(1500)
+            delay(1500.milliseconds)
             transientVolume = null
             transientBrightness = null
         }
     }
-
     // Unified robust reactive playback loading overlay dismissal manager
     val isPlayerReady = !playbackState.isLoading && playbackState.durationMs > 0
     val shouldDismissLoader = playbackState.isPlaying || isPlayerReady
 
-    LaunchedEffect(playbackState.isPlaying, playbackState.isLoading, playbackState.durationMs, shouldDismissLoader) {
+    LaunchedEffect(playbackState.isPlaying, playbackState.isLoading, playbackState.durationMs, shouldDismissLoader, hasStartedPlaying) {
         if (shouldDismissLoader) {
             showLoading = false
             hasStartedPlaying = true
-        } else if (playbackState.isLoading) {
-            if (hasStartedPlaying) {
-                delay(250) // Brief debounce for mid-playback buffering to avoid microscopic blinks
+        } else {
+            // We are NOT ready to dismiss the loader under normal circumstances,
+            // but if we have started playing and are currently paused, we must NOT show the loader!
+            if (hasStartedPlaying && !playbackState.isPlaying) {
+                showLoading = false
+            } else if (playbackState.isLoading) {
+                // Buffering or loading. Show loader if initial load OR active playback buffering.
+                val isBufferingWhilePlaying = hasStartedPlaying && playbackState.isPlaying
+                val isInitialLoading = !hasStartedPlaying
+                if (isInitialLoading || isBufferingWhilePlaying) {
+                    if (hasStartedPlaying) {
+                        delay(250.milliseconds)
+                    }
+                    if (!hasStartedPlaying || playbackState.isPlaying) {
+                        showLoading = true
+                    }
+                }
             }
-            showLoading = true
         }
     }
 
@@ -824,7 +1046,7 @@ fun PlayerScreen(
     // Safety timeout for audio track switching loader (max 2 seconds)
     LaunchedEffect(isChangingAudioTrack) {
         if (isChangingAudioTrack) {
-            delay(2000)
+            delay(2000.milliseconds)
             isChangingAudioTrack = false
         }
     }
@@ -837,7 +1059,7 @@ fun PlayerScreen(
     // Safety timeout for video track switching loader (max 2 seconds)
     LaunchedEffect(isChangingVideoTrack) {
         if (isChangingVideoTrack) {
-            delay(2000)
+            delay(2000.milliseconds)
             isChangingVideoTrack = false
         }
     }
@@ -867,10 +1089,11 @@ fun PlayerScreen(
                         scaleY = freeZoomScale,
                         translationX = freeZoomOffset.x,
                         translationY = freeZoomOffset.y,
+                        clip = false,
                     )
                     .blur(blurRadius),
             ) {
-                key(retryTrigger) {
+                key(streamUrl, retryTrigger) {
                     VideoPlayer(
                         url = streamUrl,
                         headers = headers,
@@ -897,6 +1120,33 @@ fun PlayerScreen(
                     trackColor = Color.White.copy(alpha = 0.15f),
                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 )
+            }
+
+            // Auto-switching source toast — subtle indicator when silently trying next source
+            AnimatedVisibility(
+                visible = feedbackMessage != null && feedbackMessage?.contains("Switching") == true,
+                enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -it },
+                exit = fadeOut(tween(300)),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = MovieHubDimens.Avatar.lg),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(MovieHubDimens.Spacing.xxl))
+                        .padding(horizontal = MovieHubDimens.Icon.xl, vertical = MovieHubDimens.Spacing.sm),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm)) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(MovieHubDimens.Icon.sm),
+                            strokeWidth = MovieHubDimens.Spacing.dp2,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = feedbackMessage ?: "Switching source...",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
             }
 
             // Screen lock indicator + double-tap to unlock gesture
@@ -950,19 +1200,27 @@ fun PlayerScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(Unit) {
-                            detectTransformGestures { _, pan, zoom, _ ->
+                            detectTransformGestures { centroid, pan, zoom, _ ->
                                 if (zoom != 1f) {
-                                    // Zoom symmetrically from center (like YouTube)
-                                    freeZoomScale = (freeZoomScale * zoom).coerceIn(1f, 5f)
+                                    val newScale = (freeZoomScale * zoom).coerceIn(1f, 5f)
+                                    // Adjust offset to keep the zoom centered on the pinch point
+                                    val scaleChange = newScale / freeZoomScale
+                                    freeZoomOffset = Offset(
+                                        x = freeZoomOffset.x * scaleChange + centroid.x * (1f - scaleChange),
+                                        y = freeZoomOffset.y * scaleChange + centroid.y * (1f - scaleChange),
+                                    )
+                                    freeZoomScale = newScale
                                 }
-                                if (freeZoomScale > 1f && pan != Offset.Zero) {
+                                if (freeZoomScale > 1.01f) {
                                     val maxPanX = (freeZoomScale - 1f) * size.width / 2f
                                     val maxPanY = (freeZoomScale - 1f) * size.height / 2f
                                     freeZoomOffset = Offset(
                                         x = (freeZoomOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
                                         y = (freeZoomOffset.y + pan.y).coerceIn(-maxPanY, maxPanY),
                                     )
-                                } else if (freeZoomScale <= 1f) {
+                                } else {
+                                    // Reset when zoomed all the way out
+                                    freeZoomScale = 1f
                                     freeZoomOffset = Offset.Zero
                                 }
                             }
@@ -1000,19 +1258,33 @@ fun PlayerScreen(
                                 },
                             )
                         }
-                        .pointerInput(playbackState.currentPositionMs, playbackState.durationMs) {
+                        .pointerInput(Unit) {
+                            var seekAccum = 0f
                             detectHorizontalDragGestures(
-                                onHorizontalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    val seekMs = (dragAmount * 10).toLong() // ~10s per full screen swipe
-                                    if (kotlin.math.abs(seekMs) > 200) {
-                                        lastSeekTimeMs = playerTimeMillis()
-                                        requestedAction = PlayerAction.SeekTo(
-                                            (playbackState.currentPositionMs + seekMs)
-                                                .coerceIn(0L, playbackState.durationMs.coerceAtLeast(0L)),
-                                        )
+                                onDragStart = {
+                                    seekAccum = 0f
+                                    lastSeekTimeMs = playerTimeMillis()
+                                },
+                                onDragEnd = {
+                                    val w = size.width.toFloat()
+                                    val seekMs = (seekAccum / w * 30_000L).toLong()
+                                    if (kotlin.math.abs(seekMs) > 250) {
+                                        val target = (playbackState.currentPositionMs + seekMs)
+                                            .coerceIn(0L, playbackState.durationMs.coerceAtLeast(0L))
+                                        requestedAction = PlayerAction.SeekTo(target)
                                         interactionTick++
                                     }
+                                    seekAccum = 0f
+                                },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    seekAccum += dragAmount
+                                    val w = size.width.toFloat()
+                                    val seekMs = (seekAccum / w * 30_000L).toLong()
+                                    val absMs = kotlin.math.abs(seekMs)
+                                    val m = (absMs / 60_000).toString().padStart(2, '0')
+                                    val s = ((absMs % 60_000) / 1000).toString().padStart(2, '0')
+                                    seekIndicatorText = if (seekMs >= 0) "+$m:$s" else "-$m:$s"
                                 },
                             )
                         }
@@ -1109,6 +1381,7 @@ fun PlayerScreen(
                     interactionTick++
                 },
                 progress = if (playbackState.durationMs > 0) playbackState.currentPositionMs.toFloat() / playbackState.durationMs else 0f,
+                bufferedFraction = if (playbackState.durationMs > 0) playbackState.bufferedPositionMs.toFloat() / playbackState.durationMs else 0f,
                 duration = playbackState.durationMs,
                 currentTime = playbackState.currentPositionMs,
                 onSpeedChange = { requestedAction = PlayerAction.SetSpeed(it) },
@@ -1177,10 +1450,15 @@ fun PlayerScreen(
                 audioTracks = playbackState.audioTracks,
                 videoTracks = playbackState.videoTracks,
                 onVideoTrackChange = { index ->
-                    val track = playbackState.videoTracks.getOrNull(index)
-                    if (track != null) {
+                    if (index == -1) {
                         isChangingVideoTrack = true
-                        requestedAction = PlayerAction.SelectVideoTrack(track.index, track.id.toIntOrNull() ?: 0)
+                        requestedAction = PlayerAction.SelectVideoTrack(-1, -1)
+                    } else {
+                        val track = playbackState.videoTracks.getOrNull(index)
+                        if (track != null) {
+                            isChangingVideoTrack = true
+                            requestedAction = PlayerAction.SelectVideoTrack(track.index, track.id.toIntOrNull() ?: 0)
+                        }
                     }
                 },
                 subtitleTracks = playbackState.subtitleTracks,
@@ -1222,13 +1500,17 @@ fun PlayerScreen(
                 subtitleStyle = subtitleStyle,
                 onSubtitleStyleChange = { newStyle ->
                     subtitleStyle = newStyle
-                    scope.launch {
-                        val profileId = profileRepository.activeProfile.value?.id ?: return@launch
-                        val currentPrefs = userPreferencesDao.getPreference(profileId) ?: com.moviehub.core.database.UserPreferencesEntity(profileId)
-                        val styleJson = Json.encodeToString(newStyle)
-                        userPreferencesDao.setPreference(currentPrefs.copy(subtitleStyleJson = styleJson))
+                    if (saveSubtitlesGlobally) {
+                        scope.launch {
+                            val profileId = profileRepository.activeProfile.value?.id ?: return@launch
+                            val currentPrefs = userPreferencesDao.getPreference(profileId) ?: com.moviehub.core.database.UserPreferencesEntity(profileId)
+                            val styleJson = Json.encodeToString(newStyle)
+                            userPreferencesDao.setPreference(currentPrefs.copy(subtitleStyleJson = styleJson))
+                        }
                     }
                 },
+                saveSubtitlesGlobally = saveSubtitlesGlobally,
+                onSaveSubtitlesGloballyChange = { saveSubtitlesGlobally = it },
                 videoResolution = videoResolutionLabel,
                 videoCodec = playbackState.videoCodec,
                 videoBitrate = playbackState.videoBitrate,
@@ -1276,22 +1558,47 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            // Seek indicator overlay (on top of controls, positioned at sides like YouTube)
-            if (seekIndicatorText != null) {
-                val isRewind = seekIndicatorText!!.startsWith("-")
+            // Seek indicator overlay — centered at top, YouTube-style
+            AnimatedVisibility(
+                visible = seekIndicatorText != null,
+                enter = fadeIn(animationSpec = tween(100)) + slideInVertically(animationSpec = tween(100)) { -it },
+                exit = fadeOut(animationSpec = tween(200)),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = MovieHubDimens.Avatar.lg),
+            ) {
                 Box(
                     modifier = Modifier
-                        .align(if (isRewind) Alignment.CenterStart else Alignment.CenterEnd)
-                        .padding(horizontal = MovieHubDimens.Icon.xxxl)
-                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(MovieHubDimens.Spacing.lg))
-                        .padding(horizontal = MovieHubDimens.Icon.xl, vertical = MovieHubDimens.Spacing.xl),
+                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(MovieHubDimens.Spacing.lg))
+                        .padding(horizontal = MovieHubDimens.Icon.xl, vertical = MovieHubDimens.Spacing.md),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = seekIndicatorText!!,
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs)) {
+                        // Show the delta with direction icon
+                        val text = seekIndicatorText ?: ""
+                        val isForward = text.startsWith("+")
+                        val isBackward = text.startsWith("-")
+                        if (isBackward) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh, // placeholder — rewind visual
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(MovieHubDimens.Icon.sm),
+                            )
+                        }
+                        Text(
+                            text = text,
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (isForward) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(MovieHubDimens.Icon.sm),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1310,8 +1617,10 @@ fun PlayerScreen(
                 )
             }
 
-            // Premium Error Overlay (only for actual errors)
-            if (playbackState.error != null) {
+            // Auto-switching: errors handled silently by LaunchedEffect above.
+            // No error dialog — player automatically tries next source.
+            // If all sources fail, player auto-closes.
+            if (false && playbackState.error != null) {
                 var showTechDetails by remember { mutableStateOf(false) }
 
                 Box(
@@ -1345,14 +1654,25 @@ fun PlayerScreen(
                     ) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             IconButton(
-                                onClick = onBackClick,
+                                onClick = {
+                                    val currentIdx = sortedStreams.indexOfFirst {
+                                        it.url == activeStream.url || it.infoHash == activeStream.infoHash
+                                    }
+                                    val next = sortedStreams.getOrNull(currentIdx + 1)
+                                    if (next != null) {
+                                        activeStream = next
+                                        playbackState = playbackState.copy(error = null, isLoading = true)
+                                        showLoading = true
+                                        hasStartedPlaying = false
+                                    }
+                                },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(MovieHubDimens.Spacing.sm),
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Close Player",
+                                    contentDescription = "Switch Source",
                                     tint = Color.White.copy(alpha = 0.6f),
                                     modifier = Modifier.size(MovieHubDimens.Spacing.lg),
                                 )
@@ -1559,66 +1879,75 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                // Blurred poster backdrop (if poster URL is available)
-                if (posterUrl != null && posterResource != null) {
-                    KamelImage(
-                        resource = { posterResource },
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .blur(MovieHubDimens.Player.posterBlurRadius),
-                        contentScale = ContentScale.Crop,
-                        onLoading = {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFF0F0C20),
-                                                Color(0xFF15102A),
-                                                Color(0xFF06040A),
+                if (!hasStartedPlaying) {
+                    // Blurred poster backdrop (if poster URL is available)
+                    if (posterUrl != null && posterResource != null) {
+                        KamelImage(
+                            resource = { posterResource },
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .blur(MovieHubDimens.Player.posterBlurRadius),
+                            contentScale = ContentScale.Crop,
+                            onLoading = {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF0F0C20),
+                                                    Color(0xFF15102A),
+                                                    Color(0xFF06040A),
+                                                ),
                                             ),
                                         ),
-                                    ),
-                            )
-                        },
-                        onFailure = {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFF0F0C20),
-                                                Color(0xFF15102A),
-                                                Color(0xFF06040A),
+                                )
+                            },
+                            onFailure = {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF0F0C20),
+                                                    Color(0xFF15102A),
+                                                    Color(0xFF06040A),
+                                                ),
                                             ),
                                         ),
-                                    ),
-                            )
-                        },
-                    )
-                    // Dark overlay on top of the poster for spinner contrast
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f)),
-                    )
-                } else {
-                    // No poster — fall back to rich gradient overlay
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFF0F0C20),
-                                        Color(0xFF15102A),
-                                        Color(0xFF06040A),
+                                )
+                            },
+                        )
+                        // Dark overlay on top of the poster for spinner contrast
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                        )
+                    } else {
+                        // No poster — fall back to rich gradient overlay
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF0F0C20),
+                                            Color(0xFF15102A),
+                                            Color(0xFF06040A),
+                                        ),
                                     ),
                                 ),
-                            ),
+                        )
+                    }
+                } else {
+                    // Semi-transparent overlay to keep the frozen video frame visible underneath
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.40f)),
                     )
                 }
 

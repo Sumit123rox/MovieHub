@@ -1,8 +1,10 @@
 package com.moviehub.core.model
 
 import androidx.compose.runtime.Immutable
+import kotlinx.serialization.Serializable
 
 @Immutable
+@Serializable
 data class MediaItem(
     val id: String,
     val title: String,
@@ -33,10 +35,17 @@ data class MediaItem(
     val trailers: List<MediaTrailer> = emptyList(),
     val moreLikeThis: List<MediaPreview> = emptyList(),
     val collectionName: String? = null,
-    val collectionItems: List<MediaPreview> = emptyList()
+    val collectionItems: List<MediaPreview> = emptyList(),
+    val voteCount: Int? = null,
+    val popularity: Double? = null,
+    val budget: Long? = null,
+    val revenue: Long? = null,
+    val originalTitle: String? = null,
+    val releaseDate: String? = null
 )
 
 @Immutable
+@Serializable
 data class MediaPerson(
     val name: String,
     val role: String? = null,
@@ -45,12 +54,14 @@ data class MediaPerson(
 )
 
 @Immutable
+@Serializable
 data class MediaCompany(
     val name: String,
     val logo: String? = null
 )
 
 @Immutable
+@Serializable
 data class MediaVideo(
     val id: String,
     val title: String,
@@ -62,6 +73,7 @@ data class MediaVideo(
 )
 
 @Immutable
+@Serializable
 data class MediaTrailer(
     val id: String,
     val url: String,
@@ -70,6 +82,7 @@ data class MediaTrailer(
 )
 
 @Immutable
+@Serializable
 data class ContinueWatchingItem(
     val mediaId: String,
     val title: String,
@@ -81,6 +94,7 @@ data class ContinueWatchingItem(
 )
 
 @Immutable
+@Serializable
 data class MediaPreview(
     val id: String,
     val title: String,

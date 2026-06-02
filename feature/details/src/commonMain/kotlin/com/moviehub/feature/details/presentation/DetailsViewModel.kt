@@ -2,6 +2,7 @@ package com.moviehub.feature.details.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.touchlab.kermit.Logger
 import com.moviehub.core.database.FavoriteDao
 import com.moviehub.core.database.FavoriteEntity
 import com.moviehub.core.database.ProfileRepository
@@ -30,9 +31,14 @@ class DetailsViewModel(
     private val tmdbSettingsRepository: TmdbSettingsRepository,
 ) : ViewModel() {
 
+    private val logger = Logger.withTag("DetailsViewModel")
     private val _state = MutableStateFlow(DetailsState())
     val state: StateFlow<DetailsState> = _state.asStateFlow()
     private var streamsJob: kotlinx.coroutines.Job? = null
+
+    // Throttle StreamsUpdated to max 4 updates/sec — prevents 95+ recompositions
+    private var lastStreamsEmitMs = 0L
+    private val streamsThrottleMs = 250L
 
     fun onAction(action: DetailsAction) {
         when (action) {
@@ -50,9 +56,20 @@ class DetailsViewModel(
     }
 
     private fun loadDetails(id: String, type: String, addonUrl: String?) {
-        if (_state.value.mediaItem?.id == id && !_state.value.isLoading && _state.value.error == null) {
-            return
+        val cleanId = id.removePrefix("tmdb:").removePrefix("series:").removePrefix("movie:").removePrefix("tv:")
+        val currentItem = _state.value.mediaItem
+        if (currentItem != null && !_state.value.isLoading && _state.value.error == null) {
+            val currentCleanId = currentItem.id.removePrefix("tmdb:").removePrefix("series:").removePrefix("movie:").removePrefix("tv:")
+            val matchesId = currentCleanId == cleanId || currentItem.imdbId == cleanId || currentItem.imdbId == id
+            if (matchesId) {
+                return
+            }
         }
+
+        // Reset state for new content (don't wipe currentStreamsId — loadStreams needs it for idempotency)
+        // currentStreamsId is managed exclusively by loadStreams
+        _state.value = DetailsState()
+
         viewModelScope.launch {
             PerformanceMonitor.beginSection("VM:Details:loadDetails")
             try {
@@ -144,17 +161,33 @@ class DetailsViewModel(
         }
     }
 
+    private var currentStreamsId: String? = null
+
     private fun loadStreams(id: String, type: String) {
+        if (currentStreamsId == id && _state.value.streams.isNotEmpty() && !_state.value.isSearchingStreams) {
+            return
+        }
+        currentStreamsId = id
         streamsJob?.cancel()
+        // Set searching state SYNCHRONOUSLY to prevent the UI from briefly showing
+        // "No streams found" before the coroutine starts processing
+        _state.value = _state.value.copy(
+            isSearchingStreams = true,
+            streamsError = null,
+            streams = emptyList(),
+            addonStreamStatuses = emptyMap(),
+        )
         streamsJob = viewModelScope.launch {
             PerformanceMonitor.beginSection("VM:Details:loadStreams")
             try {
                 val totalAddons = repository.getStreamAddonCount(type)
                 _state.value = _state.value.copy(
-                    isSearchingStreams = true,
                     totalStreamAddons = totalAddons,
                     processedStreamAddons = 0,
                 )
+
+                // No safety timeout — repository handles completion via guaranteed finally block
+                val safetyJob: kotlinx.coroutines.Job = kotlinx.coroutines.Job().apply { complete() }
 
                 try {
                     repository.getStreamsFlow(id, type).collect { event ->
@@ -165,6 +198,7 @@ class DetailsViewModel(
                             }
                             is com.moviehub.feature.details.data.StreamsEvent.LoadingStarted -> {
                                 _state.value = _state.value.copy(
+                                    isSearchingStreams = true,  // re-affirm in case old job's finally overwrote it
                                     addonStreamStatuses = event.providers,
                                     processedStreamAddons = 0,
                                 )
@@ -181,11 +215,17 @@ class DetailsViewModel(
                                 )
                             }
                             is com.moviehub.feature.details.data.StreamsEvent.StreamsUpdated -> {
+                                // Throttle: skip updates within 250ms to prevent 95+ recompositions
+                                val now = com.moviehub.core.utils.currentTimeMillis()
+                                if (now - lastStreamsEmitMs < streamsThrottleMs) return@collect
+                                lastStreamsEmitMs = now
+
                                 val sorted = event.streams.sortedByDescending { it.playbackPriority }
                                 _state.value = _state.value.copy(streams = sorted)
                             }
                             is com.moviehub.feature.details.data.StreamsEvent.Completed -> {
                                 val sorted = event.streams.sortedByDescending { it.playbackPriority }
+                                logger.i { "VM Completed: ${sorted.size} streams, isSearchingStreams=false" }
                                 _state.value = _state.value.copy(
                                     streams = sorted,
                                     addonStreamStatuses = event.providers,
@@ -196,8 +236,10 @@ class DetailsViewModel(
                         }
                     }
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     _state.value = _state.value.copy(streamsError = e.message)
                 } finally {
+                    safetyJob.cancel()
                     _state.value = _state.value.copy(isSearchingStreams = false)
                 }
             } finally {

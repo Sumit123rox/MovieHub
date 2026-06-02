@@ -220,6 +220,54 @@ fun DetailMetaInfo(
             )
         }
 
+        val origTitle = media.originalTitle
+        if (!origTitle.isNullOrBlank() && origTitle != media.title) {
+            MetaLabelValueRow(
+                label = "Original Title",
+                value = origTitle,
+            )
+        }
+
+        val relDate = media.releaseDate
+        if (!relDate.isNullOrBlank()) {
+            MetaLabelValueRow(
+                label = "Release Date",
+                value = relDate,
+            )
+        }
+
+        val votes = media.voteCount
+        val pop = media.popularity
+        if ((votes != null && votes > 0) || (pop != null && pop > 0.0)) {
+            val stats = buildString {
+                if (votes != null && votes > 0) append("$votes votes")
+                if (pop != null && pop > 0.0) {
+                    if (isNotEmpty()) append("   •   ")
+                    append("Popularity: ${formatPopularity(pop)}")
+                }
+            }
+            MetaLabelValueRow(
+                label = "Ratings Detail",
+                value = stats,
+            )
+        }
+
+        val budget = media.budget
+        if (budget != null && budget > 0) {
+            MetaLabelValueRow(
+                label = "Budget",
+                value = formatCurrency(budget),
+            )
+        }
+
+        val revenue = media.revenue
+        if (revenue != null && revenue > 0) {
+            MetaLabelValueRow(
+                label = "Revenue",
+                value = formatCurrency(revenue),
+            )
+        }
+
         if (!media.description.isNullOrBlank()) {
             var expanded by remember { mutableStateOf(false) }
             var canExpand by remember(media.description) { mutableStateOf(false) }
@@ -358,6 +406,28 @@ private fun formatRuntime(runtime: String?): String? {
         hours > 0 -> "${hours}h"
         else -> "${mins}m"
     }
+}
+
+private fun formatPopularity(value: Double): String {
+    val truncated = (value * 10).toInt() / 10.0
+    val whole = truncated.toInt()
+    val tenth = ((truncated - whole) * 10).toInt()
+    return "$whole.$tenth"
+}
+
+private fun formatCurrency(amount: Long): String {
+    if (amount <= 0) return "-"
+    val str = amount.toString()
+    val sb = StringBuilder()
+    var count = 0
+    for (i in str.length - 1 downTo 0) {
+        sb.append(str[i])
+        count++
+        if (count % 3 == 0 && i > 0) {
+            sb.append(',')
+        }
+    }
+    return "$" + sb.reverse().toString()
 }
 
 private val ImdbYellow = Color(0xFFF5C518)

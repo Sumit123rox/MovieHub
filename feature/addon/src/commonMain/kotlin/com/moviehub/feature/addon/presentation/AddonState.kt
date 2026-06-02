@@ -11,6 +11,7 @@ data class AddonState(
     val addonUrls: Map<String, String> = emptyMap(),
     val error: String? = null,
     val successMessage: String? = null,
+    val refreshingAddonIds: Set<String> = emptySet(),
 )
 
 sealed interface AddonAction {

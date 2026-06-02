@@ -26,6 +26,9 @@ import com.moviehub.core.network.tmdb.TmdbEnrichmentService
 import com.moviehub.core.network.tmdb.TmdbImageUrl
 import com.moviehub.core.ui.components.Poster
 import com.moviehub.core.ui.components.shimmerEffect
+import com.moviehub.core.ui.components.SmartStatusBar
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import org.koin.compose.koinInject
@@ -38,6 +41,11 @@ fun PersonDetailScreen(
     onMediaClick: (id: String, type: String) -> Unit,
     enrichmentService: TmdbEnrichmentService = koinInject(),
 ) {
+    val isSystemDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    SmartStatusBar(
+        isDark = isSystemDark,
+        color = Color.Transparent,
+    )
     var uiState by remember { mutableStateOf(PersonDetailUiState()) }
 
     LaunchedEffect(personId) {

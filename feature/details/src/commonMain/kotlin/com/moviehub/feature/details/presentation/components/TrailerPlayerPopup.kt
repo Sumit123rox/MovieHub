@@ -23,6 +23,7 @@ import com.moviehub.feature.player.presentation.PlayerAction
 import com.moviehub.feature.player.presentation.VideoPlayer
 import com.moviehub.feature.player.presentation.components.PlayerControls
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import org.koin.compose.koinInject
 
 @Composable
@@ -59,7 +60,7 @@ fun TrailerPlayerPopup(
     // Auto-hide controls after 3s of playback
     LaunchedEffect(isControlsVisible, playbackState.isPlaying) {
         if (isControlsVisible && playbackState.isPlaying) {
-            delay(3000)
+            delay(3000.milliseconds)
             isControlsVisible = false
         }
     }

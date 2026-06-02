@@ -110,15 +110,14 @@ actual fun VideoPlayer(
     }
 
     // ═══ Force landscape orientation ═══
+    // Note: orientation unlock on dispose is handled by PlayerScreen's
+    // DisposableEffect — NOT here. Restoring orientation on source switch
+    // causes a landscape→portrait→landscape flicker.
     DisposableEffect(forceLandscape) {
         if (forceLandscape) {
             forceLandscapeOrientation()
         }
-        onDispose {
-            if (forceLandscape) {
-                unlockOrientation()
-            }
-        }
+        onDispose { /* orientation restored by PlayerScreen */ }
     }
 
     var hasStarted by remember { mutableStateOf(false) }

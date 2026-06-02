@@ -17,18 +17,19 @@ import com.moviehub.core.ui.theme.MovieHubDimens
 fun TechnicalBadge(
     text: String,
     modifier: Modifier = Modifier,
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+    contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
 ) {
-    val accentPrimary = MaterialTheme.colorScheme.primary
     val badgeShape = RoundedCornerShape(MovieHubDimens.Spacing.xxs)
 
     Surface(
         modifier = modifier
             .border(
                 width = MovieHubDimens.Spacing.dp1,
-                color = accentPrimary.copy(alpha = 0.35f),
+                color = contentColor.copy(alpha = 0.35f),
                 shape = badgeShape,
             ),
-        color = accentPrimary.copy(alpha = 0.08f),
+        color = containerColor,
         shape = badgeShape,
     ) {
         Box(
@@ -39,7 +40,7 @@ fun TechnicalBadge(
         ) {
             Text(
                 text = text.uppercase(),
-                color = accentPrimary,
+                color = contentColor,
                 fontSize = MovieHubDimens.Font.xs,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,

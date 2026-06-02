@@ -39,6 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.ui.components.ContentCard
 import com.moviehub.core.ui.components.TechnicalBadge
+import com.moviehub.core.ui.components.SmartStatusBar
+import androidx.compose.ui.graphics.luminance
 import com.moviehub.core.ui.theme.MovieHubColors
 import kotlinx.coroutines.flow.collectLatest
 import moviehub.core.ui.generated.resources.Res
@@ -52,6 +54,7 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun AddonScreen(
+    onBackClick: () -> Unit = {},
     addonViewModel: AddonViewModel = koinViewModel(),
     pluginsViewModel: PluginsViewModel = koinViewModel(),
 ) {
@@ -60,6 +63,12 @@ fun AddonScreen(
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+
+    val isSystemDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    SmartStatusBar(
+        isDark = isSystemDark,
+        color = MaterialTheme.colorScheme.background,
+    )
 
     LaunchedEffect(Unit) {
         addonViewModel.event.collectLatest { event ->
@@ -70,6 +79,12 @@ fun AddonScreen(
     }
 
     Scaffold(
+        topBar = {
+            com.moviehub.core.ui.components.MovieHubTopBar(
+                title = "External Providers",
+                onBackClick = onBackClick,
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { paddingValues ->
         Column(
@@ -78,14 +93,6 @@ fun AddonScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Screen Header
-            Text(
-                text = "External Providers",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                fontWeight = FontWeight.Bold,
-            )
 
             // Tabs to switch between Stremio Addons and JS Scrapers
             TabRow(
@@ -280,11 +287,42 @@ fun AddonScreen(
                                                 }
                                             }
                                         }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        val supportsMovies = addon.types.contains("movie") || addon.types.contains("movies")
+                                        val supportsSeries = addon.types.contains("series") || addon.types.contains("show") || addon.types.contains("tv")
+                                        val isRefreshing = addonState.refreshingAddonIds.contains(addon.id)
+
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
                                             TechnicalBadge(text = "v${addon.version}")
-                                            addon.types.forEach { type ->
-                                                TechnicalBadge(text = type.uppercase())
+                                            if (supportsMovies) {
+                                                TechnicalBadge(
+                                                    text = "MOVIES SUPPORTED",
+                                                    containerColor = MovieHubColors.Success.copy(alpha = 0.12f),
+                                                    contentColor = MovieHubColors.Success
+                                                )
+                                            }
+                                            if (supportsSeries) {
+                                                TechnicalBadge(
+                                                    text = "SERIES SUPPORTED",
+                                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                    contentColor = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            if (isRefreshing) {
+                                                TechnicalBadge(
+                                                    text = "REFRESHING...",
+                                                    containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                                                    contentColor = MaterialTheme.colorScheme.secondary
+                                                )
+                                            } else {
+                                                TechnicalBadge(
+                                                    text = "ACTIVE",
+                                                    containerColor = Color.White.copy(alpha = 0.08f),
+                                                    contentColor = Color.White.copy(alpha = 0.6f)
+                                                )
                                             }
                                         }
                                     }

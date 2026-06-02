@@ -96,8 +96,11 @@ import io.kamel.image.asyncPainterResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import com.moviehub.core.ui.components.SmartStatusBar
+import androidx.compose.ui.graphics.luminance
 
 @Composable
 fun StreamDiscoveryIndicator(processed: Int, total: Int) {
@@ -301,11 +304,19 @@ fun StreamsScreen(
     id: String,
     type: String,
     mediaId: String? = null,
+    title: String? = null,
+    backdropUrl: String? = null,
     onPlayClick: (stream: StreamItem, streams: List<StreamItem>, title: String?, posterUrl: String?) -> Unit,
     onBackClick: () -> Unit,
     viewModel: DetailsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+
+    val isSystemDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    SmartStatusBar(
+        isDark = isSystemDark,
+        color = MaterialTheme.colorScheme.background,
+    )
     val downloadsRepository: DownloadsRepository = koinInject()
     val profileRepository: com.moviehub.core.database.ProfileRepository = koinInject()
     val scope = rememberCoroutineScope()
@@ -336,6 +347,7 @@ fun StreamsScreen(
 
     val listState = rememberLazyListState()
     var isHeaderVisible by remember { mutableStateOf(true) }
+    val headerDebounce = remember { mutableStateOf(0) }
 
     LaunchedEffect(listState) {
         var lastIndex = 0
@@ -346,51 +358,63 @@ fun StreamsScreen(
             val scrolledEnough = index > 0 || offset > 64
             val scrollingDown = index > lastIndex || (index == lastIndex && offset > lastOffset)
             val scrollingUp = index < lastIndex || (index == lastIndex && offset < lastOffset)
-            if (scrollingDown && isHeaderVisible && scrolledEnough) {
-                isHeaderVisible = false
-            } else if (scrollingUp && !isHeaderVisible) {
-                isHeaderVisible = true
+
+            if (scrollingDown && scrolledEnough) {
+                headerDebounce.value = (headerDebounce.value + 1).coerceAtMost(5)
+                if (headerDebounce.value >= 3 && isHeaderVisible) isHeaderVisible = false
+            } else if (scrollingUp) {
+                headerDebounce.value = (headerDebounce.value - 1).coerceAtLeast(-3)
+                if (headerDebounce.value <= -2 && !isHeaderVisible) isHeaderVisible = true
+            } else {
+                headerDebounce.value = 0
             }
+
             lastIndex = index
             lastOffset = offset
-            delay(100)
+            delay(100.milliseconds)
         }
     }
 
-    // Parse season/episode from stream ID (e.g. "tt12345:1:3" → S1 E3)
+    // Parse season/episode from stream ID (e.g. "tt12345:1:3" → S1 E3, "tmdb:12345:1:3" → S1 E3)
     val streamSeasonEpisode = remember(id) {
         val parts = id.split(":")
         if (parts.size >= 3) {
-            val s = parts[1].toIntOrNull()
-            val e = parts[2].toIntOrNull()
+            val s = parts[parts.size - 2].toIntOrNull()
+            val e = parts[parts.size - 1].toIntOrNull()
             if (s != null && e != null) Pair(s, e) else null
         } else {
             null
         }
     }
 
-    LaunchedEffect(id, type, mediaId) {
-        viewModel.onAction(DetailsAction.LoadDetails(mediaId ?: id, type, null))
-        viewModel.onAction(DetailsAction.LoadStreams(id, type))
+    // Only load on first composition or when ID changes — not on resume/back-navigation
+    var lastLoadedId by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(id, type) {
+        if (lastLoadedId != id) {
+            lastLoadedId = id
+            viewModel.onAction(DetailsAction.LoadDetails(mediaId ?: id, type, null))
+            viewModel.onAction(DetailsAction.LoadStreams(id, type))
+        }
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { paddingValues ->
-        // Try backgroundUrl, fallback to posterUrl
-        val backdropUrl = state.mediaItem?.backgroundUrl
+        // Try backgroundUrl, fallback to posterUrl, then pass-through backdropUrl
+        val activeBackdropUrl = state.mediaItem?.backgroundUrl
             ?: state.mediaItem?.posterUrl
-        val hasBackdrop = backdropUrl != null
-
+            ?: backdropUrl
+        val hasBackdrop = activeBackdropUrl != null
+ 
         Box(modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
         ) {
             // ===== FULLSCREEN BACKDROP (keyed on URL to avoid unnecessary recomposition) =====
-            key(backdropUrl) {
-                if (backdropUrl != null) {
-                    StreamsBackdrop(backdropUrl = backdropUrl)
+            key(activeBackdropUrl) {
+                if (activeBackdropUrl != null) {
+                    StreamsBackdrop(backdropUrl = activeBackdropUrl)
                 } else {
                     Box(
                         modifier = Modifier
@@ -407,7 +431,7 @@ fun StreamsScreen(
                     )
                 }
             }
-
+ 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -467,7 +491,8 @@ fun StreamsScreen(
                                         .padding(horizontal = MovieHubDimens.Spacing.sm, vertical = MovieHubDimens.Spacing.dp2),
                                 )
                             }
-                            state.mediaItem?.title?.let {
+                            val displayTitle = state.mediaItem?.title ?: title
+                            displayTitle?.let {
                                 Text(
                                     text = it,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -480,27 +505,39 @@ fun StreamsScreen(
                 }
 
                 // ===== STREAM CONTENT =====
-                val isInitiallyLoading = (state.isLoading || state.isSearchingStreams || state.mediaItem == null) && state.streams.isEmpty()
+                // Show shimmer when: searching, or haven't started yet (no addon count)
+                val isInitiallyLoading = state.streams.isEmpty() && (state.isSearchingStreams || state.totalStreamAddons == 0)
                 if (isInitiallyLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(MovieHubDimens.Spacing.lg),
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md)) {
-                            Text(
-                                text = "Searching for streams...",
-                                color = Color.White.copy(alpha = 0.5f),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            repeat(5) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(MovieHubDimens.Player.shimmerHeight)
-                                        .clip(RoundedCornerShape(MovieHubDimens.Spacing.md))
-                                        .shimmerEffect(),
+                        GlassyBox(
+                            modifier = Modifier.fillMaxWidth(),
+                            blurRadius = MovieHubDimens.Spacing.md,
+                            baseAlpha = 0.55f,
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(MovieHubDimens.Spacing.lg),
+                                verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md)
+                            ) {
+                                Text(
+                                    text = "Searching for streams...",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
                                 )
+                                repeat(5) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MovieHubDimens.Player.shimmerHeight)
+                                            .clip(RoundedCornerShape(MovieHubDimens.Spacing.md))
+                                            .shimmerEffect(),
+                                    )
+                                }
                             }
                         }
                     }
@@ -526,7 +563,10 @@ fun StreamsScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.ms),
                     ) {
-                        if (state.isSearchingStreams && state.addonStreamStatuses.isNotEmpty()) {
+                        val hasActiveProviders = state.addonStreamStatuses.values.any {
+                            it is AddonStreamStatus.Pending || it is AddonStreamStatus.Fetching
+                        }
+                        if (hasActiveProviders && state.addonStreamStatuses.isNotEmpty()) {
                             item {
                                 AddonStatusPills(statuses = state.addonStreamStatuses)
                             }
@@ -541,7 +581,7 @@ fun StreamsScreen(
                                     if (stream.isTorrentStream) {
                                         activeTorrentStream = stream
                                     } else if (stream.hasPlayableSource) {
-                                        onPlayClick(stream, displayStreams, state.mediaItem?.title, state.mediaItem?.posterUrl)
+                                        onPlayClick(stream, state.streams, state.mediaItem?.title, state.mediaItem?.posterUrl)
                                     } else {
                                         noPlayableSource = stream
                                     }
@@ -567,7 +607,9 @@ fun StreamsScreen(
                             )
                         }
 
-                        if (state.streams.isEmpty() && !state.isSearchingStreams) {
+                        // Only show "No streams found" after search actually completed
+                        // (totalStreamAddons > 0 means we attempted the search)
+                        if (state.streams.isEmpty() && !state.isSearchingStreams && state.totalStreamAddons > 0) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -575,11 +617,21 @@ fun StreamsScreen(
                                         .padding(top = MovieHubDimens.EmptyState.iconSize),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    EmptyState(
-                                        icon = Icons.Default.TheaterComedy,
-                                        title = "No streams found",
-                                        subtitle = "Try adding more addons or check back later",
-                                    )
+                                    GlassyBox(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = MovieHubDimens.Spacing.md),
+                                        blurRadius = MovieHubDimens.Spacing.md,
+                                        baseAlpha = 0.85f,
+                                    ) {
+                                        Box(modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xl)) {
+                                            EmptyState(
+                                                icon = Icons.Default.TheaterComedy,
+                                                title = "No streams found",
+                                                subtitle = "Try adding more addons or check back later",
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -760,6 +812,13 @@ fun StreamItemCard(
                     )
                 }
 
+                val combinedLc = remember(stream) {
+                    val n = stream.name ?: ""
+                    val d = stream.description ?: ""
+                    val f = stream.behaviorHints.filename ?: ""
+                    "$n $d $f".lowercase()
+                }
+
                 // Technical specs & rich badges flow grid
                 Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xs))
                 FlowRow(
@@ -774,6 +833,35 @@ fun StreamItemCard(
                         contentColor = MaterialTheme.colorScheme.secondary
                     )
 
+                    // Stream Format badge (HLS, DASH, MP4, WebM)
+                    val format = stream.streamFormat
+                    if (format != com.moviehub.core.model.StreamFormat.UNKNOWN) {
+                        val formatColor = when (format) {
+                            com.moviehub.core.model.StreamFormat.HLS -> Color(0xFF00E676)
+                            com.moviehub.core.model.StreamFormat.DASH -> Color(0xFF29B6F6)
+                            else -> Color(0xFFFFB74D)
+                        }
+                        StreamMetadataBadge(
+                            text = format.name,
+                            backgroundColor = formatColor.copy(alpha = 0.15f),
+                            contentColor = formatColor
+                        )
+                    }
+
+                    // Adaptive Streaming & Auto Quality Badges
+                    if (format == com.moviehub.core.model.StreamFormat.HLS || format == com.moviehub.core.model.StreamFormat.DASH) {
+                        StreamMetadataBadge(
+                            text = "Adaptive Streaming",
+                            backgroundColor = Color(0xFF00E676).copy(alpha = 0.15f),
+                            contentColor = Color(0xFF00E676)
+                        )
+                        StreamMetadataBadge(
+                            text = "Auto Quality",
+                            backgroundColor = Color(0xFF00E676).copy(alpha = 0.15f),
+                            contentColor = Color(0xFF00E676)
+                        )
+                    }
+
                     // Resolution Badge
                     meta.quality?.let { qual ->
                         StreamMetadataBadge(
@@ -785,19 +873,44 @@ fun StreamItemCard(
 
                     // HDR/Dolby Vision Badges
                     meta.hdr.forEach { hdrType ->
+                        val hdrBgColor = if (hdrType == "Dolby Vision") Color(0xFFFF4081).copy(alpha = 0.15f) else Color(0xFFE040FB).copy(alpha = 0.15f)
+                        val hdrContentColor = if (hdrType == "Dolby Vision") Color(0xFFFF4081) else Color(0xFFE040FB)
                         StreamMetadataBadge(
                             text = hdrType,
-                            backgroundColor = Color(0xFFE040FB).copy(alpha = 0.15f),
-                            contentColor = Color(0xFFE040FB)
+                            backgroundColor = hdrBgColor,
+                            contentColor = hdrContentColor
                         )
                     }
 
                     // Audio Badges
                     meta.audio.forEach { aud ->
+                        val audText = if (aud == "Atmos") "Dolby Atmos" else aud
+                        val audBgColor = if (aud == "Atmos") Color(0xFF7C4DFF).copy(alpha = 0.15f) else Color(0xFF00E5FF).copy(alpha = 0.15f)
+                        val audContentColor = if (aud == "Atmos") Color(0xFF7C4DFF) else Color(0xFF00E5FF)
                         StreamMetadataBadge(
-                            text = aud,
+                            text = audText,
+                            backgroundColor = audBgColor,
+                            contentColor = audContentColor
+                        )
+                    }
+
+                    // Multi Audio Badge
+                    val hasMultiAudio = meta.languages.contains("Multi") || combinedLc.contains("multi-audio") || combinedLc.contains("dual-audio") || combinedLc.contains("multi audio") || combinedLc.contains("dual audio") || combinedLc.contains("dubbed")
+                    if (hasMultiAudio) {
+                        StreamMetadataBadge(
+                            text = "Multi Audio",
                             backgroundColor = Color(0xFF00E5FF).copy(alpha = 0.15f),
                             contentColor = Color(0xFF00E5FF)
+                        )
+                    }
+
+                    // Subtitles Available Badge
+                    val hasSubtitles = combinedLc.contains("subtitles") || combinedLc.contains("subbed") || combinedLc.contains("subs") || combinedLc.contains("multi-sub") || combinedLc.contains("multisubs")
+                    if (hasSubtitles) {
+                        StreamMetadataBadge(
+                            text = "Subtitles Available",
+                            backgroundColor = Color(0xFFFFD700).copy(alpha = 0.15f),
+                            contentColor = Color(0xFFFFD700)
                         )
                     }
 

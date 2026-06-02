@@ -81,18 +81,24 @@ class ScraperManager(
 
         return try {
             log.d { "Running JS plugin: ${plugin.name}" }
-            val results = PluginRuntime.executePlugin(
-                httpClient = httpClient,
-                code = plugin.code,
-                tmdbId = imdbId,
-                mediaType = normalizedType,
-                season = season,
-                episode = episode,
-                scraperId = plugin.id,
-            )
+            val results = kotlinx.coroutines.withTimeout(10_000L) {
+                PluginRuntime.executePlugin(
+                    httpClient = httpClient,
+                    code = plugin.code,
+                    tmdbId = imdbId,
+                    mediaType = normalizedType,
+                    season = season,
+                    episode = episode,
+                    scraperId = plugin.id,
+                )
+            }
             results.map { it.toStreamItem(plugin.name, plugin.id) }
-        } catch (e: Exception) {
-            log.e(e) { "JS plugin ${plugin.name} failed" }
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                log.d { "JS plugin ${plugin.name} cancelled" }
+                throw e  // MUST re-throw for structured concurrency
+            }
+            log.w { "JS plugin ${plugin.name} failed: ${e.message?.take(80)}" }
             emptyList()
         }
     }
@@ -122,19 +128,28 @@ class ScraperManager(
                 async {
                     try {
                         log.d { "Running JS plugin: ${plugin.name}" }
-                        val results = PluginRuntime.executePlugin(
-                            httpClient = httpClient,
-                            code = plugin.code,
-                            tmdbId = imdbId,
-                            mediaType = normalizedType,
-                            season = season,
-                            episode = episode,
-                            scraperId = plugin.id,
-                        )
+                        // Per-plugin timeout prevents native crashes (SIGSEGV in QuickJS)
+                        // from hanging the entire stream resolution — the timeout cancels
+                        // the coroutine before broken JS has time to crash the engine.
+                        val results = kotlinx.coroutines.withTimeout(10_000L) {
+                            PluginRuntime.executePlugin(
+                                httpClient = httpClient,
+                                code = plugin.code,
+                                tmdbId = imdbId,
+                                mediaType = normalizedType,
+                                season = season,
+                                episode = episode,
+                                scraperId = plugin.id,
+                            )
+                        }
                         // Convert PluginRuntimeResult to StreamItem
                         results.map { it.toStreamItem(plugin.name, plugin.id) }
-                    } catch (e: Exception) {
-                        log.e(e) { "JS plugin ${plugin.name} failed" }
+                    } catch (e: Throwable) {
+                        if (e is kotlinx.coroutines.CancellationException) {
+                            log.d { "JS plugin ${plugin.name} cancelled (timeout)" }
+                        } else {
+                            log.w { "JS plugin ${plugin.name} failed: ${e.message?.take(80)}" }
+                        }
                         emptyList()
                     }
                 }

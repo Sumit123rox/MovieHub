@@ -162,6 +162,7 @@ class HomeRepositoryImpl(
                         emptyList()
                     }
                 } catch (e: Exception) {
+                    logger.w(e) { "getCachedCatalogs failed for ${manifest.id}: ${e.message?.take(80)}" }
                     emptyList()
                 }
             }

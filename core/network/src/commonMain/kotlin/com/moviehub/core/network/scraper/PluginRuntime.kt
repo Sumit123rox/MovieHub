@@ -125,7 +125,7 @@ object PluginRuntime {
                     try {
                         performNativeFetch(httpClient, url, method, headersJson, body, followRedirects)
                     } catch (t: Throwable) {
-                        log.e(t) { "Fetch bridge error for $method $url" }
+                        log.w(t) { "Plugin fetch bridge error for $method ${url.take(80)}" }
                         JsonObject(
                             mapOf(
                                 "ok" to JsonPrimitive(false),
@@ -369,7 +369,13 @@ object PluginRuntime {
                 ),
             ).toString()
         } catch (error: Throwable) {
-            log.e(error) { "Fetch error for $method $url" }
+            val isTimeout = error is io.ktor.client.network.sockets.ConnectTimeoutException ||
+                error.message?.contains("timeout", ignoreCase = true) == true
+            if (isTimeout) {
+                log.w { "Plugin fetch timed out for $method ${url.take(80)}" }
+            } else {
+                log.w(error) { "Plugin fetch error for $method ${url.take(80)}" }
+            }
             JsonObject(
                 mapOf(
                     "ok" to JsonPrimitive(false),
@@ -472,7 +478,7 @@ object PluginRuntime {
                 )
             }.filter { it.url.isNotBlank() }
         }.getOrElse { error ->
-            log.e(error) { "Failed to parse plugin result json" }
+            log.w { "Failed to parse plugin result: ${error.message?.take(80)}" }
             emptyList()
         }
     }

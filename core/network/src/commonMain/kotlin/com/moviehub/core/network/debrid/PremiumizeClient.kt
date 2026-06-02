@@ -9,6 +9,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Premiumize.me client — same DebridProvider interface.
@@ -63,7 +64,7 @@ class PremiumizeClient(
 
             while (attempts < maxAttempts) {
                 attempts++
-                delay(3000)
+                delay(3000.milliseconds)
 
                 val listText = httpClient.get("https://www.premiumize.me/api/transfer/list") {
                     parameter("apikey", apiKey)

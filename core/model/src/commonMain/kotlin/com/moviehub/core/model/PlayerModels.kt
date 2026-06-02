@@ -52,6 +52,7 @@ data class PlayerPlaybackState(
     val playbackSpeed: Float = 1f,
     val selectedAudioTrackIndex: Int = -1,
     val selectedSubtitleTrackIndex: Int = -1,
+    val selectedVideoTrackIndex: Int = -1,
     val audioTracks: List<AudioTrack> = emptyList(),
     val subtitleTracks: List<SubtitleTrack> = emptyList(),
     val videoTracks: List<VideoTrack> = emptyList(),

@@ -8,6 +8,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.milliseconds
 
 class RealDebridClient(
     private val httpClient: HttpClient,
@@ -129,20 +130,20 @@ class RealDebridClient(
                 }
                 "magnet_conversion" -> {
                     // Still processing magnet → torrent metadata
-                    delay(2000)
+                    delay(2000.milliseconds)
                 }
                 "downloading" -> {
                     // Data is being fetched — check every 5s
-                    delay(5000)
+                    delay(5000.milliseconds)
                 }
                 "waiting_files_selection" -> {
                     // File selection needed — re-select and continue
                     selectFiles(addResp.id)
-                    delay(3000)
+                    delay(3000.milliseconds)
                 }
                 "queued" -> {
                     // RD is overloaded — wait longer
-                    delay(5000)
+                    delay(5000.milliseconds)
                 }
                 "error", "virus", "dead" -> {
                     return Result.failure(Exception("Torrent ${torrentInfo.status}: unable to process"))
@@ -155,7 +156,7 @@ class RealDebridClient(
                     if (attempts > 5) {
                         return Result.failure(Exception("Unknown torrent status: ${torrentInfo.status}"))
                     }
-                    delay(3000)
+                    delay(3000.milliseconds)
                 }
             }
         }
@@ -184,7 +185,7 @@ class RealDebridClient(
             if (result.isSuccess) return result
             lastError = result.exceptionOrNull()
             if (attempt < MAX_RETRIES) {
-                delay((500L * (attempt + 1)).coerceAtMost(3000L))
+                delay(((500L * (attempt + 1)).coerceAtMost(3000L)).milliseconds)
             }
         }
         return Result.failure(lastError ?: Exception("Retry exhausted"))
@@ -196,6 +197,6 @@ class RealDebridClient(
      */
     private suspend fun rateLimitCheck() {
         // Simple cooldown — avoids needing platform-specific clock APIs
-        delay(2500)
+        delay(2500.milliseconds)
     }
 }

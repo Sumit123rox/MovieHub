@@ -7,7 +7,7 @@ import com.moviehub.core.model.StremioManifest
 
 @Immutable
 data class HomeState(
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,  // start loading — prevents empty state flash before ViewModel init
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val hasMoreSections: Boolean = false,
@@ -27,6 +27,7 @@ data class CatalogSection(
     val catalogName: String,
     val type: String,
     val items: List<MediaItem> = emptyList(),
+    val stableKey: String = "${addonId}_${catalogId}_$type",
 )
 
 sealed interface HomeAction {

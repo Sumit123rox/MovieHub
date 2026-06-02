@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -79,7 +80,18 @@ import com.moviehub.core.ui.components.Poster
 import com.moviehub.core.ui.components.SmartStatusBar
 import com.moviehub.core.ui.components.shimmerEffect
 import com.moviehub.core.ui.theme.MovieHubDimens
+import androidx.compose.ui.graphics.luminance
 import kotlinx.coroutines.delay
+import moviehub.core.ui.generated.resources.Res
+import moviehub.core.ui.generated.resources.continue_watching
+import moviehub.core.ui.generated.resources.home_add_provider_prompt
+import moviehub.core.ui.generated.resources.home_configure_providers
+import moviehub.core.ui.generated.resources.home_get_started
+import moviehub.core.ui.generated.resources.home_supports_addons
+import moviehub.core.ui.generated.resources.loading_more
+import moviehub.core.ui.generated.resources.pick_up_where_left
+import moviehub.core.ui.generated.resources.reached_end
+import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -96,6 +108,12 @@ fun HomeScreen(
     var onboardingDismissed by rememberSaveable { mutableStateOf(false) }
     var selectedCategoryType by rememberSaveable { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    val rowScrollStates = remember { mutableMapOf<String, LazyListState>() }
+    // Evict scroll states for removed sections to prevent unbounded memory growth
+    LaunchedEffect(state.dynamicSections.size) {
+        val activeKeys = state.dynamicSections.map { it.stableKey }.toSet()
+        rowScrollStates.keys.removeAll { it !in activeKeys }
+    }
 
     // Detect when user scrolls near the bottom to trigger lazy loading
     val shouldLoadMore by remember {
@@ -118,9 +136,10 @@ fun HomeScreen(
         }
     }
 
+    val isSystemDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     SmartStatusBar(
-        isDark = true,
-        color = MaterialTheme.colorScheme.background,
+        isDark = isSystemDark,
+        color = Color.Transparent,
     )
 
     Scaffold(
@@ -189,7 +208,7 @@ fun HomeScreen(
                                     }
 
                                     Text(
-                                        text = "Get Started",
+                                        text = stringResource(Res.string.home_get_started),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -197,7 +216,7 @@ fun HomeScreen(
                                     )
 
                                     Text(
-                                        text = "Add an external provider to start browsing movies and series.",
+                                        text = stringResource(Res.string.home_add_provider_prompt),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                         textAlign = TextAlign.Center,
@@ -222,7 +241,7 @@ fun HomeScreen(
                                             modifier = Modifier.size(MovieHubDimens.Spacing.ml),
                                         )
                                         Text(
-                                            text = "Supports Stremio HTTP Addons & JS Plugins",
+                                            text = stringResource(Res.string.home_supports_addons),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                             modifier = Modifier.weight(1f),
@@ -241,7 +260,7 @@ fun HomeScreen(
                                             .height(MovieHubDimens.Player.sideSliderWidth),
                                     ) {
                                         Text(
-                                            text = "Configure External Providers",
+                                            text = stringResource(Res.string.home_configure_providers),
                                             fontWeight = FontWeight.Bold,
                                             letterSpacing = 0.5.sp,
                                         )
@@ -285,9 +304,9 @@ fun HomeScreen(
                             )
                         }
                     }
-                } else if (state.isLoading && state.dynamicSections.isEmpty()) {
+                } else if ((state.isLoading || state.isRefreshing) && state.dynamicSections.isEmpty()) {
                     // OLED-friendly high-fidelity skeleton shimmers instead of CircularProgressIndicator
-                    items(3) { index ->
+                    items(3, key = { "loading_shimmer_$it" }) { index ->
                         if (index == 0) {
                             // Hero Carousel Shimmer
                             Box(
@@ -376,14 +395,18 @@ fun HomeScreen(
                 }
                 items(
                     items = displaySections,
-                    key = { "${it.addonId}_${it.catalogId}_${it.type}" },
+                    key = { it.stableKey },
                 ) { section ->
+                    val rowListState = remember(section.stableKey) {
+                        rowScrollStates.getOrPut(section.stableKey) { LazyListState() }
+                    }
                     AnimatedEntry(index = 2) {
                         HomeSection(
                             title = section.catalogName,
                             subtitle = null,
                             mediaItems = section.items,
                             watchedMediaIds = state.watchedMediaIds,
+                            rowListState = rowListState,
                             onSeeAllClick = {
                                 onSeeAllClick(
                                     section.catalogName,
@@ -407,8 +430,8 @@ fun HomeScreen(
                     }
                 }
 
-                // Empty state — always shown when no content is available
-                if (state.dynamicSections.isEmpty() && !state.isLoading) {
+                // Empty state — only when loading is truly finished
+                if (state.dynamicSections.isEmpty() && !state.isLoading && !state.isRefreshing) {
                     item(key = "empty_home") {
                         Box(
                             modifier = Modifier
@@ -456,7 +479,7 @@ fun HomeScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "Loading more...",
+                                    text = stringResource(Res.string.loading_more),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                 )
@@ -501,7 +524,7 @@ fun HomeScreen(
 
                             // Main closing message
                             Text(
-                                text = "You've reached the end 🎬",
+                                text = stringResource(Res.string.reached_end),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -599,7 +622,7 @@ private fun AnimatedEntry(
 ) {
     val alpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        delay((index * 40L).coerceAtMost(300))
+        delay(((index * 40L).coerceAtMost(300)).milliseconds)
         alpha.animateTo(1f, tween(350))
     }
 
@@ -622,7 +645,10 @@ private fun CategoryFilterBar(
     modifier: Modifier = Modifier,
 ) {
     val types = remember(sections) {
-        sections.map { it.type }.distinct().sorted()
+        val list = sections.map { it.type }.distinct().toMutableList()
+        if (!list.contains("movie")) list.add("movie")
+        if (!list.contains("series")) list.add("series")
+        list.sorted()
     }
     if (types.isEmpty()) return
 
@@ -732,7 +758,7 @@ fun ContinueWatchingSection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Continue Watching",
+                    text = stringResource(Res.string.continue_watching),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -740,7 +766,7 @@ fun ContinueWatchingSection(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Pick up where you left off",
+                    text = stringResource(Res.string.pick_up_where_left),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                     fontWeight = FontWeight.Bold,
@@ -1024,6 +1050,7 @@ fun HomeSection(
     subtitle: String?,
     mediaItems: List<MediaItem>,
     watchedMediaIds: Set<String> = emptySet(),
+    rowListState: LazyListState = rememberLazyListState(),
     onSeeAllClick: () -> Unit,
     onItemClick: (id: String, type: String, addonUrl: String?) -> Unit,
     onItemHover: (id: String, type: String, addonId: String?) -> Unit = { _, _, _ -> },
@@ -1072,8 +1099,6 @@ fun HomeSection(
         }
 
         Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.md))
-
-        val rowListState = rememberLazyListState()
         LazyRow(
             state = rowListState,
             contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.lg),
@@ -1086,7 +1111,7 @@ fun HomeSection(
                 // Fire prewarm after 800ms of continuous press
                 LaunchedEffect(isPressed) {
                     if (isPressed) {
-                        delay(MovieHubDimens.PrefetchTiming.catalogItemHoverMs)
+                        delay(MovieHubDimens.PrefetchTiming.catalogItemHoverMs.milliseconds)
                         onItemHover(item.id, item.type.stremioType, item.sourceAddonId)
                     }
                 }

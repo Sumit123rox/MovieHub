@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import com.moviehub.core.network.StorageInfo
 
 class DownloadsViewModel(
@@ -35,7 +36,7 @@ class DownloadsViewModel(
     fun cancelDownload(item: DownloadItem) {
         viewModelScope.launch {
             downloadsRepository.cancelDownload(item)
-            delay(500) // Give the file deletion some time to propagate
+            delay(500.milliseconds) // Give the file deletion some time to propagate
             updateStorageInfo()
         }
     }

@@ -53,6 +53,7 @@ import com.moviehub.feature.player.presentation.CastButton
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.milliseconds
 
 enum class PlayerSettingsType {
     SPEED,
@@ -74,6 +75,7 @@ fun PlayerControls(
     onBackClick: () -> Unit,
     onSeek: (Float) -> Unit,
     progress: Float,
+    bufferedFraction: Float = 0f,
     duration: Long,
     currentTime: Long,
     seekIncrement: Int = 10,
@@ -114,6 +116,8 @@ fun PlayerControls(
     onSleepTimerSet: (Long?) -> Unit = {},
     subtitleStyle: SubtitleStyle = SubtitleStyle(),
     onSubtitleStyleChange: (SubtitleStyle) -> Unit = {},
+    saveSubtitlesGlobally: Boolean = true,
+    onSaveSubtitlesGloballyChange: (Boolean) -> Unit = {},
     preferredResolution: String = "Auto",
     onResolutionChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -122,7 +126,7 @@ fun PlayerControls(
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(feedbackMessage) {
         if (feedbackMessage != null) {
-            kotlinx.coroutines.delay(2000)
+            kotlinx.coroutines.delay(2000.milliseconds)
             feedbackMessage = null
         }
     }
@@ -514,11 +518,6 @@ fun PlayerControls(
                                         indication = null,
                                     ) { },
                             ) {
-                                ChapterMarkerOverlay(
-                                    chapters = chapters,
-                                    duration = duration,
-                                    modifier = Modifier.align(Alignment.Center),
-                                )
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -527,6 +526,19 @@ fun PlayerControls(
                                         .clip(RoundedCornerShape(MovieHubDimens.Spacing.dp3))
                                         .background(Color.White.copy(alpha = 0.15f)),
                                 ) {
+                                    // Buffered zone — shows pre-fetched data ahead of playback
+                                    if (bufferedFraction > 0.01f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(fraction = bufferedFraction.coerceIn(0f, 1f))
+                                                .background(
+                                                    Color(0xFF90CAF9).copy(alpha = 0.25f),
+                                                    RoundedCornerShape(MovieHubDimens.Spacing.dp3),
+                                                ),
+                                        )
+                                    }
+                                    // Played progress
                                     Box(
                                         modifier = Modifier
                                             .fillMaxHeight()
@@ -538,12 +550,16 @@ fun PlayerControls(
                                     )
                                 }
 
+                                ChapterMarkerOverlay(
+                                    chapters = chapters,
+                                    duration = duration,
+                                    modifier = Modifier.align(Alignment.Center),
+                                )
+
                                 Slider(
                                     value = progress,
                                     onValueChange = onSeek,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .offset(y = (-1).dp),
+                                    modifier = Modifier.fillMaxSize(),
                                     colors = SliderDefaults.colors(
                                         thumbColor = accentPrimaryLight,
                                         activeTrackColor = Color.Transparent,
@@ -727,7 +743,14 @@ fun PlayerControls(
                                         label = track.label,
                                         subtext = audioMetaText.takeIf { it.isNotBlank() },
                                         isSelected = isSelected,
-                                        onClick = { selectedAudioIdx = idx },
+                                        onClick = {
+                                            selectedAudioIdx = idx
+                                            val audioTrack = audioTracks.getOrNull(idx)
+                                            if (audioTrack != null) {
+                                                onAudioTrackChange(audioTrack.index, audioTrack.id.toIntOrNull() ?: 0)
+                                                activeSettingsSheet = null // close after selection
+                                            }
+                                        },
                                         trailingIcon = {
                                             if (isSelected) {
                                                 Row(
@@ -746,36 +769,6 @@ fun PlayerControls(
                                         },
                                     )
                                 }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.md))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                        Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.sm))
-
-                        // Apply + Cancel bottom-right
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            OutlinedButton(
-                                onClick = { activeSettingsSheet = null },
-                                shape = RoundedCornerShape(MovieHubDimens.Radius.md),
-                                modifier = Modifier.padding(end = MovieHubDimens.Spacing.sm),
-                            ) {
-                                Text("Cancel")
-                            }
-                            Button(
-                                onClick = {
-                                    val audioTrack = audioTracks.getOrNull(selectedAudioIdx)
-                                    if (audioTrack != null) {
-                                        onAudioTrackChange(audioTrack.index, audioTrack.id.toIntOrNull() ?: 0)
-                                    }
-                                    activeSettingsSheet = null
-                                },
-                                shape = RoundedCornerShape(MovieHubDimens.Radius.md),
-                            ) {
-                                Text("Apply")
                             }
                         }
                     }
@@ -837,7 +830,6 @@ fun PlayerControls(
                                             },
                                             onTap = {
                                                 onSpeedChange(speed)
-                                                activeSettingsSheet = null
                                             },
                                         )
                                     }
@@ -898,6 +890,7 @@ fun PlayerControls(
                 PlayerOverlaySheet(
                     title = "Subtitle & Styling Center",
                     maxWidth = 950.dp,
+                    heightFraction = 0.95f,
                     onDismiss = { activeSettingsSheet = null },
                 ) {
                     // 50/50 Split Layout
@@ -963,6 +956,7 @@ fun PlayerControls(
                                             onClick = {
                                                 onSubtitleTrackChange(-1, -1)
                                             },
+                                            contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.md, vertical = MovieHubDimens.Spacing.sm),
                                         )
                                     }
 
@@ -997,6 +991,7 @@ fun PlayerControls(
                                                         )
                                                     }
                                                 },
+                                                contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.md, vertical = MovieHubDimens.Spacing.sm),
                                             )
                                         }
                                     } else {
@@ -1070,11 +1065,11 @@ fun PlayerControls(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(130.dp)
+                                    .height(72.dp)
                                     .clip(RoundedCornerShape(MovieHubDimens.Radius.lg))
                                     .background(Color.Black.copy(alpha = 0.85f))
                                     .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(MovieHubDimens.Radius.lg))
-                                    .padding(MovieHubDimens.Spacing.md),
+                                    .padding(MovieHubDimens.Spacing.xs),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 // Real-time rendered caption preview
@@ -1110,16 +1105,16 @@ fun PlayerControls(
 
                                     Box(
                                         modifier = Modifier
-                                            .padding(bottom = MovieHubDimens.Spacing.xs)
+                                            .padding(bottom = MovieHubDimens.Spacing.xxs)
                                             .clip(RoundedCornerShape(4.dp))
                                             .background(bgCol)
-                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(
                                             text = "Watching MovieHub in Style...",
                                             color = textCol,
-                                            fontSize = subtitleStyle.fontSizeSp.sp,
+                                            fontSize = (subtitleStyle.fontSizeSp * 0.65f).coerceIn(10f, 16f).sp,
                                             fontStyle = if (subtitleStyle.isItalic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
                                             fontWeight = if (subtitleStyle.isBold) FontWeight.Bold else FontWeight.Normal,
                                             letterSpacing = subtitleStyle.letterSpacingSp.sp,
@@ -1138,12 +1133,31 @@ fun PlayerControls(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.sm))
+                            // Global Default Checkbox (Compact & clickable)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSaveSubtitlesGloballyChange(!saveSubtitlesGlobally) }
+                                    .padding(vertical = MovieHubDimens.Spacing.xxs),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = saveSubtitlesGlobally,
+                                    onCheckedChange = onSaveSubtitlesGloballyChange,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Spacer(modifier = Modifier.width(MovieHubDimens.Spacing.xs))
+                                Text(
+                                    text = "Save as global default for all videos",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                )
+                            }
 
                             // Tab Row for categories
                             ScrollableTabRow(
                                 selectedTabIndex = selectedTab,
-                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                modifier = Modifier.fillMaxWidth().height(36.dp),
                                 edgePadding = 0.dp,
                                 containerColor = Color.Transparent,
                                 contentColor = MaterialTheme.colorScheme.primary,
@@ -1157,13 +1171,13 @@ fun PlayerControls(
                                 },
                             ) {
                                 Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
-                                    Text("Typography", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xs))
+                                    Text("Typography", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xxs))
                                 }
                                 Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
-                                    Text("Color & FX", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xs))
+                                    Text("Color & FX", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xxs))
                                 }
                                 Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }) {
-                                    Text("Presets", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xs))
+                                    Text("Presets", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.xxs))
                                 }
                             }
 
@@ -1172,14 +1186,14 @@ fun PlayerControls(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f)
-                                    .padding(vertical = MovieHubDimens.Spacing.sm),
+                                    .padding(vertical = MovieHubDimens.Spacing.xs),
                             ) {
                                 when (selectedTab) {
                                     0 -> {
                                         // TYPOGRAPHY TAB
                                         LazyColumn(
                                             modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
+                                            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
                                         ) {
                                             // Font Family Chips
                                             item {
@@ -1279,7 +1293,7 @@ fun PlayerControls(
                                         // COLORS & EFFECTS TAB
                                         LazyColumn(
                                             modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.md),
+                                            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xs),
                                         ) {
                                             // Text Color row
                                             item {
@@ -1651,7 +1665,6 @@ fun PlayerControls(
                                     isSelected = isSelected,
                                     onClick = {
                                         onAudioTrackChange(track.index, track.id.toIntOrNull() ?: 0)
-                                        activeSettingsSheet = null
                                     },
                                     trailingIcon = {
                                         if (isSelected) {
@@ -1757,7 +1770,7 @@ fun PlayerControls(
                                             },
                                             onTap = {
                                                 onStreamChange(stream)
-                                                activeSettingsSheet = null
+                                                activeSettingsSheet = null // close dialog after source selection
                                             },
                                         )
                                     }
@@ -1836,7 +1849,6 @@ fun PlayerControls(
                                 isSelected = isSelected,
                                 onClick = {
                                     onSleepTimerSet(ms)
-                                    activeSettingsSheet = null
                                 },
                             )
                         }
@@ -1866,6 +1878,19 @@ fun PlayerControls(
                             verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
+                            // First, the "Auto" resolution option
+                            item {
+                                val isAutoSelected = videoTracks.none { it.isSelected }
+                                KineticSelectorRow(
+                                    label = "Auto",
+                                    subtext = "Adapts automatically to network conditions",
+                                    isSelected = isAutoSelected,
+                                    onClick = {
+                                        onVideoTrackChange(-1)
+                                    },
+                                )
+                            }
+
                             items(videoTracks.size) { idx ->
                                 val track = videoTracks[idx]
                                 val resolutionText = remember(track) {
@@ -1900,7 +1925,6 @@ fun PlayerControls(
                                     isSelected = track.isSelected,
                                     onClick = {
                                         onVideoTrackChange(idx)
-                                        activeSettingsSheet = null
                                     },
                                 )
                             }
@@ -2035,6 +2059,7 @@ fun KineticSelectorRow(
     subtext: String? = null,
     leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
+    contentPadding: PaddingValues = PaddingValues(horizontal = MovieHubDimens.Spacing.lg, vertical = MovieHubDimens.Spacing.md),
 ) {
     val accentPrimary = MaterialTheme.colorScheme.primary
     val accentSecondary = MaterialTheme.colorScheme.secondary
@@ -2096,7 +2121,7 @@ fun KineticSelectorRow(
                     onTap = { onClick() },
                 )
             }
-            .padding(horizontal = MovieHubDimens.Spacing.lg, vertical = MovieHubDimens.Spacing.md),
+            .padding(contentPadding),
     ) {
         if (leadingIcon != null) {
             leadingIcon()
@@ -2164,6 +2189,7 @@ fun PlayerOverlaySheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     maxWidth: androidx.compose.ui.unit.Dp = MovieHubDimens.Sheet.maxWidth,
+    heightFraction: Float = MovieHubDimens.Sheet.maxHeightFraction,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val accentPrimary = MaterialTheme.colorScheme.primary
@@ -2187,7 +2213,7 @@ fun PlayerOverlaySheet(
         Box(
             modifier = Modifier
                 .widthIn(min = MovieHubDimens.Sheet.minWidth, max = maxWidth)
-                .fillMaxHeight(MovieHubDimens.Sheet.maxHeightFraction)
+                .fillMaxHeight(heightFraction)
                 .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                 .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
                 .clickable(

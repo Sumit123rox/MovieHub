@@ -5,6 +5,7 @@ import com.moviehub.core.database.TraktSettingsRepository
 import com.moviehub.core.network.debrid.RealDebridClient
 import com.moviehub.core.network.trakt.TraktClient
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 interface AuthRepository {
     suspend fun getTraktDeviceCode(): Result<String>
@@ -51,7 +52,7 @@ class AuthRepositoryImpl(
                     return Result.failure(err)
                 }
             }
-            delay(5000)
+            delay(5000.milliseconds)
         }
         return Result.failure(Exception("Polling timed out"))
     }
@@ -82,7 +83,7 @@ class AuthRepositoryImpl(
                     return Result.failure(err)
                 }
             }
-            delay(5000)
+            delay(5000.milliseconds)
         }
         return Result.failure(Exception("Polling timed out"))
     }

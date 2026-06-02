@@ -73,6 +73,7 @@ val databaseModule =
         single { get<MovieDatabase>().customCollectionDao() }
         single { ProfileRepository(get()) }
         single { TmdbSettingsRepository(get(), get()) }
+        single<Json> { appJson }
         single { com.moviehub.core.database.DebridSettingsRepository(get(), get()) }
         single { com.moviehub.core.database.TraktSettingsRepository(get(), get()) }
         single { com.moviehub.core.database.PlaybackPreferencesRepository(get(), get()) }
@@ -180,7 +181,7 @@ val homeModule =
 
 val searchModule =
     module {
-        single<SearchRepository> { SearchRepositoryImpl(get(), get(), get()) }
+        single<SearchRepository> { SearchRepositoryImpl(get(), get(), get(), get(), get()) }
         viewModel { SearchViewModel(get(), get(), get()) }
     }
 
@@ -199,7 +200,7 @@ val detailsModule =
 
 val syncModule =
     module {
-        viewModel { SyncViewModel(get()) }
+        viewModel { SyncViewModel(get(), get(), get(), get()) }
     }
 
 val authModule =
@@ -211,6 +212,19 @@ val authModule =
 val playerModule =
     module {
         single { MoviePlayerController() }
+        viewModel {
+            com.moviehub.feature.player.presentation.PlayerViewModel(
+                playerController = get(),
+                watchProgressDao = get(),
+                watchHistoryDao = get(),
+                profileRepository = get(),
+                userPreferencesDao = get(),
+                torrentResolver = get(),
+                playbackPrefsRepository = get(),
+                addonManager = get(),
+                stremioApiClient = get(),
+            )
+        }
     }
 
 fun appModules(): List<Module> =

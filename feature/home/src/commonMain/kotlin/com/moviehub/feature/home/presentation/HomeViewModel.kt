@@ -2,6 +2,7 @@ package com.moviehub.feature.home.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.touchlab.kermit.Logger
 import com.moviehub.core.database.ProfileRepository
 import com.moviehub.core.database.WatchHistoryDao
 import com.moviehub.core.database.WatchProgressDao
@@ -28,11 +29,13 @@ class HomeViewModel(
     private val profileRepository: ProfileRepository,
     private val stremioApiClient: StremioApiClient? = null,
 ) : ViewModel() {
+    private val logger = Logger.withTag("HomeViewModel")
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
     private val pageSize = 5
     private var pendingCatalogs: List<PendingCatalog> = emptyList()
+    private var isPageLoading = false
 
     private data class CatalogSource(
         val addonId: String,
@@ -73,6 +76,7 @@ class HomeViewModel(
                             if (addons.isNotEmpty()) {
                                 loadDynamicCatalogs(addons)
                             } else {
+                                logger.d { "init collect: addons empty, clearing sections (isLoading=${_state.value.isLoading})" }
                                 _state.value = _state.value.copy(
                                     dynamicSections = emptyList(),
                                 )
@@ -195,7 +199,8 @@ class HomeViewModel(
 
             is HomeAction.LoadMore -> {
                 viewModelScope.launch {
-                    if (!_state.value.isLoadingMore && pendingCatalogs.isNotEmpty()) {
+                    if (!isPageLoading && !_state.value.isLoadingMore && pendingCatalogs.isNotEmpty()) {
+                        isPageLoading = true
                         _state.value = _state.value.copy(isLoadingMore = true)
                         try {
                             var loadedAny = false
@@ -207,8 +212,9 @@ class HomeViewModel(
                                 }
                             }
                         } catch (e: Exception) {
-                            // Ignore — individual requests are already caught internally
+                            logger.w(e) { "LoadMore page failed: ${e.message?.take(80)}" }
                         } finally {
+                            isPageLoading = false
                             _state.value = _state.value.copy(
                                 isLoadingMore = false,
                                 hasMoreSections = pendingCatalogs.isNotEmpty(),
@@ -256,11 +262,10 @@ class HomeViewModel(
     }
 
     private suspend fun loadDynamicCatalogs(addons: List<StremioManifest>) {
+        logger.i { "loadDynamicCatalogs START — ${addons.size} addons, isLoading=${_state.value.isLoading}" }
         PerformanceMonitor.beginSection("HomeVM.loadCatalogs")
         PerformanceMonitor.counter("HomeVM.catalogCount", addons.sumOf { it.catalogs.size }.toLong())
         try {
-            // Show shimmer immediately — prevents empty-state text from flashing
-            // during the gap between addon detection and cache query completion
             _state.value = _state.value.copy(isLoading = true)
 
             // Group catalogs by name and type across all addons to ensure complete pre-consolidation
@@ -279,14 +284,18 @@ class HomeViewModel(
                 }
             }
 
-            pendingCatalogs = allCatalogs.groupBy { Pair(it.first, it.second.trim()) }
-                .map { (key, list) ->
-                    PendingCatalog(
-                        type = key.first,
-                        catalogName = key.second,
-                        sources = list.map { it.third }.distinctBy { "${it.addonId}_${it.catalogId}" }
-                    )
-                }
+            val grouped = allCatalogs.groupBy { Pair(it.first, it.second.trim().lowercase()) }
+            pendingCatalogs = grouped.map { (key, list) ->
+                val displayName = list.map { it.second.trim() }
+                    .firstOrNull { it.any { c -> c.isUpperCase() } }
+                    ?: list.first().second.trim()
+
+                PendingCatalog(
+                    type = key.first,
+                    catalogName = displayName,
+                    sources = list.map { it.third }.distinctBy { "${it.addonId}_${it.catalogId}" }
+                )
+            }.sortedWith(compareBy({ it.type }, { it.catalogName }))
 
             // ═══════════════════════════════════════════
             // PHASE 1: Load first page from cache only (fast, no network)
@@ -353,41 +362,33 @@ class HomeViewModel(
 
             if (cachedSections.isNotEmpty()) {
                 val cachedConsolidated = consolidateSections(cachedSections)
-                _state.value = _state.value.copy(
-                    featuredItems = cachedConsolidated.first,
-                    dynamicSections = cachedConsolidated.second,
-                    isLoading = false,
-                    isRefreshing = true, // cache shown, network refresh in background
-                )
-            } else {
-                // Keep isRefreshing unchanged — if user pulled to refresh, preserve the spinner
-                _state.value = _state.value.copy(isLoading = true)
-            }
-
-            // ═══════════════════════════════════════════
-            // PHASE 2: Load first page from network
-            // Subsequent pages load as user scrolls (via LoadMore action)
-            // Loop until we have at least one dynamic section to display on the screen
-            // ═══════════════════════════════════════════
-            var loadedAny = _state.value.dynamicSections.isNotEmpty()
-            while (pendingCatalogs.isNotEmpty() && !loadedAny) {
-                val prevCount = _state.value.dynamicSections.size
-                loadNextCatalogPage()
-                if (_state.value.dynamicSections.size > prevCount) {
-                    loadedAny = true
+                val featured = cachedConsolidated.first.ifEmpty {
+                    cachedConsolidated.second.firstOrNull()?.items?.take(5) ?: emptyList()
                 }
+                val hasData = cachedConsolidated.second.isNotEmpty()
+                _state.value = _state.value.copy(
+                    featuredItems = featured,
+                    dynamicSections = cachedConsolidated.second,
+                    isLoading = !hasData,       // stay in shimmer if cache produced nothing
+                    isRefreshing = hasData,
+                )
             }
 
-            // Re-consolidate after network data arrives to populate featuredItems
-            // if Phase 1 had empty cache
-            if (_state.value.featuredItems.isEmpty() && _state.value.dynamicSections.isNotEmpty()) {
-                val netConsolidated = consolidateSections(_state.value.dynamicSections)
-                _state.value = _state.value.copy(featuredItems = netConsolidated.first)
+            // Phase 2: Network batch — interleaves multiple addons' items
+            try {
+                if (pendingCatalogs.isNotEmpty()) {
+                    loadNextCatalogPage()
+                }
+            } catch (e: Exception) {
+                logger.w(e) { "Phase 2 network batch failed" }
             }
 
+            val hasContent = _state.value.dynamicSections.isNotEmpty()
+            logger.i { "loadDynamicCatalogs DONE — sections=${_state.value.dynamicSections.size}, featured=${_state.value.featuredItems.size}" }
+            // Shimmer stays until we ACTUALLY have data — no empty state flash
             _state.value = _state.value.copy(
-                isLoading = false,
-                isRefreshing = false,
+                isLoading = !hasContent,       // keep shimmer if nothing loaded
+                isRefreshing = hasContent,     // subtle refresh if we have cached data
                 hasMoreSections = pendingCatalogs.isNotEmpty(),
             )
         } catch (e: Exception) {
@@ -469,6 +470,7 @@ class HomeViewModel(
 
         if (networkSections.isNotEmpty()) {
             val currentSections = _state.value.dynamicSections.toMutableList()
+            var changed = false
 
             networkSections.forEach { section ->
                 val key = "${section.catalogName.trim().lowercase()}_${section.type}"
@@ -476,30 +478,39 @@ class HomeViewModel(
                     "${it.catalogName.trim().lowercase()}_${it.type}" == key
                 }
                 if (existingIndex >= 0) {
-                    // Update existing section with fresh network items if they are not empty (replacing cached items)
-                    if (section.items.isNotEmpty()) {
-                        val existing = currentSections[existingIndex]
-                        val isMultiAddon = existing.addonId != section.addonId || existing.addonId == "multi_addons"
-                        currentSections[existingIndex] = existing.copy(
-                            items = section.items,
-                            addonId = if (isMultiAddon) "multi_addons" else existing.addonId,
-                            addonName = if (isMultiAddon) "Multiple Providers" else existing.addonName,
-                        )
+                    // Section exists — interleave new items from other addons
+                    // instead of appending, so all addons appear together naturally
+                    val existing = currentSections[existingIndex]
+                    val existingIds = existing.items.map { it.id }.toSet()
+                    val newItems = section.items.filter { it.id !in existingIds }
+                    if (newItems.isNotEmpty()) {
+                        val interleaved = mutableListOf<com.moviehub.core.model.MediaItem>()
+                        val maxLen = maxOf(existing.items.size, newItems.size)
+                        for (i in 0 until maxLen) {
+                            if (i < existing.items.size) interleaved.add(existing.items[i])
+                            if (i < newItems.size) interleaved.add(newItems[i])
+                        }
+                        currentSections[existingIndex] = existing.copy(items = interleaved)
+                        changed = true
                     }
                 } else {
-                    // Append completely new section
+                    // Brand new section — append
                     currentSections.add(section)
+                    changed = true
                 }
             }
 
-            val consolidated = consolidateSections(currentSections)
-            val updatedSections = consolidated.second
-
-            // Cap at 30 to bound memory growth
-            _state.value = _state.value.copy(
-                dynamicSections = if (updatedSections.size > 30) updatedSections.take(30) else updatedSections,
-                featuredItems = if (_state.value.featuredItems.isEmpty()) consolidated.first else _state.value.featuredItems
-            )
+            if (changed) {
+                val sections = if (currentSections.size > 30) currentSections.take(30) else currentSections
+                val cons = consolidateSections(sections)
+                val featured = cons.first.ifEmpty {
+                    cons.second.firstOrNull()?.items?.take(5) ?: emptyList()
+                }
+                _state.value = _state.value.copy(
+                    dynamicSections = sections,
+                    featuredItems = featured,
+                )
+            }
         }
     }
 
@@ -542,7 +553,29 @@ class HomeViewModel(
             )
         }.filter { it.items.isNotEmpty() }
 
-        val sorted = consolidated.sortedWith(compareBy({ it.type }, { it.catalogName }))
-        return Pair(featured, sorted)
+        // Deduplicate identical catalog display names across different types (e.g. "Popular" movie vs "Popular" series)
+        val nameCounts = consolidated.groupBy { it.catalogName.trim().lowercase() }
+        val finalSections = consolidated.map { section ->
+            val count = nameCounts[section.catalogName.trim().lowercase()]?.size ?: 0
+            if (count > 1) {
+                val suffix = when (section.type.lowercase()) {
+                    "movie" -> " Movies"
+                    "series" -> " Series"
+                    "anime" -> " Anime"
+                    "channel" -> " Channels"
+                    else -> " ${section.type.replaceFirstChar { it.uppercase() }}"
+                }
+                // Avoid double appending if it already ends with the suffix
+                if (!section.catalogName.endsWith(suffix, ignoreCase = true)) {
+                    section.copy(catalogName = "${section.catalogName.trim()}$suffix")
+                } else {
+                    section
+                }
+            } else {
+                section
+            }
+        }
+
+        return Pair(featured, finalSections)
     }
 }

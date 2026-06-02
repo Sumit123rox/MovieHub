@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -69,6 +70,8 @@ fun RootNavGraph() {
 
     // No active profile → show the profile picker directly (never render HomeScreen first)
     if (activeProfile == null) {
+        // Pre-warm HomeScreen data while user selects profile — instant content on login
+        val homeViewModel: com.moviehub.feature.home.presentation.HomeViewModel = koinViewModel()
         ProfileScreen(
             viewModel = koinViewModel(),
             onProfileSelected = {
@@ -128,10 +131,10 @@ fun RootNavGraph() {
                         val iconScale by animateFloatAsState(
                             targetValue = if (isSelected) 1.15f else 1f,
                             animationSpec =
-                            spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow,
-                            ),
+                                spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow,
+                                ),
                             label = "nav_icon_scale",
                         )
 
@@ -143,7 +146,6 @@ fun RootNavGraph() {
                                     modifier = Modifier.scale(iconScale),
                                 )
                             },
-                            label = { Text(item.label) },
                             selected = isSelected,
                             onClick = {
                                 if (item.screen == Screen.Home) {
@@ -166,13 +168,11 @@ fun RootNavGraph() {
                                 }
                             },
                             colors =
-                            NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                            ),
+                                NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                                    indicatorColor = Color.Transparent,
+                                ),
                         )
                     }
                 }
@@ -183,10 +183,10 @@ fun RootNavGraph() {
             navController = navController,
             startDestination = Screen.Home,
             modifier =
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(bottom = paddingValues.calculateBottomPadding()),
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(bottom = paddingValues.calculateBottomPadding()),
             enterTransition = { fadeIn(animationSpec = tween(300)) + slideInHorizontally(initialOffsetX = { it / 10 }) },
             exitTransition = { fadeOut(animationSpec = tween(300)) + slideOutHorizontally(targetOffsetX = { -it / 10 }) },
             popEnterTransition = { fadeIn(animationSpec = tween(300)) + slideInHorizontally(initialOffsetX = { -it / 10 }) },
@@ -229,10 +229,15 @@ fun RootNavGraph() {
                 )
             }
             composable<Screen.Addon> {
-                AddonScreen()
+                AddonScreen(
+                    onBackClick = { navController.popBackStack() }
+                )
             }
             composable<Screen.Sync> {
-                SyncScreen()
+                SyncScreen(
+                    onNavigateToAuth = { navController.navigate(Screen.Auth) },
+                    onBackClick = { navController.popBackStack() },
+                )
             }
             composable<Screen.Settings> {
                 val scope = rememberCoroutineScope()
@@ -256,6 +261,9 @@ fun RootNavGraph() {
                     },
                     onNavigateToAuth = {
                         navController.navigate(Screen.Auth)
+                    },
+                    onBackClick = {
+                        navController.popBackStack()
                     },
                 )
             }
@@ -286,8 +294,8 @@ fun RootNavGraph() {
                     id = details.id,
                     type = details.type,
                     addonUrl = details.addonUrl,
-                    onNavigateToStreams = { id, type, mediaId ->
-                        navController.navigate(Screen.Streams(id, type, mediaId))
+                    onNavigateToStreams = { id, type, mediaId, title, backdropUrl ->
+                        navController.navigate(Screen.Streams(id, type, mediaId, title, backdropUrl))
                     },
                     onNavigateToDetails = { id, type ->
                         navController.navigate(Screen.Details(id, type))
@@ -300,6 +308,7 @@ fun RootNavGraph() {
                             navController.navigate(Screen.PersonDetail(tmdbId, person.name))
                         }
                     },
+                    viewModel = koinViewModel(viewModelStoreOwner = backStackEntry),
                 )
             }
             composable<Screen.PersonDetail> { backStackEntry ->
@@ -319,6 +328,8 @@ fun RootNavGraph() {
                     id = streams.id,
                     type = streams.type,
                     mediaId = streams.mediaId,
+                    title = streams.title,
+                    backdropUrl = streams.backdropUrl,
                     onPlayClick = { stream, allStreams, title, posterUrl ->
                         val launchId =
                             PlayerLaunchStore.put(
@@ -334,6 +345,7 @@ fun RootNavGraph() {
                         navController.navigate(Screen.Player(launchId))
                     },
                     onBackClick = { navController.popBackStack() },
+                    viewModel = koinViewModel(viewModelStoreOwner = backStackEntry),
                 )
             }
             composable<Screen.Player> { backStackEntry ->

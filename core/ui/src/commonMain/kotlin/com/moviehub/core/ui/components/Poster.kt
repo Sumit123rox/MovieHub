@@ -17,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import com.moviehub.core.ui.theme.MovieHubDimens
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Movie
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -51,6 +53,15 @@ fun Poster(
         label = "PosterPressScale"
     )
 
+    val resolvedUrl = remember(url) {
+        if (url.isNullOrBlank()) null
+        else if (!url.startsWith("http")) {
+            "https://image.tmdb.org/t/p/w342$url"
+        } else {
+            url
+        }
+    }
+
     Surface(
         modifier = modifier
             .graphicsLayer(scaleX = scale, scaleY = scale)
@@ -68,9 +79,9 @@ fun Poster(
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (url != null) {
+            if (resolvedUrl != null) {
                 KamelImage(
-                    resource = { asyncPainterResource(data = url) },
+                    resource = { asyncPainterResource(data = resolvedUrl) },
                     contentDescription = contentDescription,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -82,8 +93,35 @@ fun Poster(
                         )
                     },
                     onFailure = {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("!", color = MaterialTheme.colorScheme.error)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(MovieHubDimens.Spacing.sm)
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Default.Movie,
+                                    contentDescription = "Failed to load image",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.size(MovieHubDimens.Icon.xl)
+                                )
+                                if (!title.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(MovieHubDimens.Spacing.xs))
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     },
                 )

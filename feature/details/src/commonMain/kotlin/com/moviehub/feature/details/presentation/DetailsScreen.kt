@@ -20,7 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaType
 import com.moviehub.core.ui.components.shimmerEffect
+import com.moviehub.core.ui.components.SmartStatusBar
 import com.moviehub.core.ui.theme.MovieHubDimens
+import androidx.compose.ui.graphics.luminance
 import com.moviehub.feature.details.presentation.components.*
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -29,7 +31,7 @@ fun DetailsScreen(
     id: String,
     type: String,
     addonUrl: String? = null,
-    onNavigateToStreams: (id: String, type: String, mediaId: String) -> Unit = { _, _, _ -> },
+    onNavigateToStreams: (id: String, type: String, mediaId: String, title: String?, backdropUrl: String?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToDetails: (id: String, type: String) -> Unit = { _, _ -> },
     onBackClick: () -> Unit = {},
     onCastClick: ((com.moviehub.core.model.MediaPerson) -> Unit)? = null,
@@ -38,6 +40,12 @@ fun DetailsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var selectedTrailer by remember { mutableStateOf<com.moviehub.core.model.MediaTrailer?>(null) }
+
+    val isSystemDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    SmartStatusBar(
+        isDark = isSystemDark,
+        color = Color.Transparent,
+    )
 
     val listState = rememberLazyListState()
 
@@ -184,7 +192,13 @@ fun DetailsScreen(
                             DetailActionButtons(
                                 playLabel = playLabel,
                                 onPlayClick = {
-                                    onNavigateToStreams(defaultStreamId, media.type.stremioType, media.id)
+                                    onNavigateToStreams(
+                                        defaultStreamId,
+                                        media.type.stremioType,
+                                        media.id,
+                                        media.title,
+                                        media.backgroundUrl ?: media.posterUrl
+                                    )
                                 },
                                 isSaved = state.isFavorite,
                                 onSaveClick = { viewModel.onAction(DetailsAction.ToggleFavorite) },
@@ -211,10 +225,11 @@ fun DetailsScreen(
                         }
                     }
 
-                    if (media.cast.isNotEmpty()) {
+                    if (media.cast.isNotEmpty() || state.isLoading) {
                         item {
                             DetailCastSection(
                                 cast = media.cast,
+                                isLoading = state.isLoading || media.cast.isEmpty(),
                                 modifier = Modifier.padding(vertical = MovieHubDimens.Spacing.lg),
                                 onCastClick = onCastClick,
                             )
@@ -240,7 +255,13 @@ fun DetailsScreen(
                                 media = media,
                                 onEpisodeClick = { episode ->
                                     val streamId = if (episode.id.isNotBlank() && episode.id.contains(":")) episode.id else "${media.id}:${episode.season}:${episode.episode}"
-                                    onNavigateToStreams(streamId, "series", media.id)
+                                    onNavigateToStreams(
+                                        streamId,
+                                        "series",
+                                        media.id,
+                                        media.title,
+                                        media.backgroundUrl ?: media.posterUrl
+                                    )
                                 },
                             )
                         }

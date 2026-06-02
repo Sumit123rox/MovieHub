@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration.Companion.milliseconds
 import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -184,7 +185,7 @@ actual class TorrentEngine actual constructor(private val ctx: PlatformContext) 
                 ),
             )
             _progress.value = _progress.value.filter { it.torrentId != infoHash } + progress
-            delay(2000)
+            delay(2000.milliseconds)
             attempts++
         }
     }

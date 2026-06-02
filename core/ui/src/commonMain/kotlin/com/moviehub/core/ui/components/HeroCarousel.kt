@@ -46,6 +46,9 @@ import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import moviehub.core.ui.generated.resources.Res
+import moviehub.core.ui.generated.resources.watch_now
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.isActive
 import kotlin.math.absoluteValue
 import kotlin.time.Duration.Companion.milliseconds
@@ -210,8 +213,8 @@ fun HeroCarousel(
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color.White,
-                                    Color(0xFFD3D3D3),
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.primaryContainer,
                                 ),
                             ),
                         )
@@ -219,10 +222,10 @@ fun HeroCarousel(
                         .padding(horizontal = MovieHubDimens.Spacing.xxxl, vertical = MovieHubDimens.Spacing.ms),
                 ) {
                     Text(
-                        text = "Details",
+                        text = stringResource(Res.string.watch_now),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.Black,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
             }

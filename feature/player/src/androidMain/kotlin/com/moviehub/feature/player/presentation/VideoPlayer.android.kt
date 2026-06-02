@@ -1,3 +1,5 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.moviehub.feature.player.presentation
 
 import android.app.Activity
@@ -32,6 +34,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.moviehub.core.model.AudioTrack
 import com.moviehub.core.model.ChapterInfo
 import com.moviehub.core.model.PlayerPlaybackState
@@ -50,8 +53,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import org.koin.compose.koinInject
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.milliseconds
 
 class AndroidMoviePlayer(
     private val context: Context,
@@ -135,7 +140,6 @@ class AndroidMoviePlayer(
                         ),
                     )
                     .build()
-                if (!exoPlayer.isPlaying) exoPlayer.play()
             }
         }
     }
@@ -146,7 +150,6 @@ class AndroidMoviePlayer(
                 .buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
-            if (!exoPlayer.isPlaying) exoPlayer.play()
         } else {
             val track = playbackState.value.subtitleTracks.getOrNull(trackIndex) ?: return
             val groups = exoPlayer.currentTracks.groups
@@ -178,23 +181,29 @@ class AndroidMoviePlayer(
     }
 
     override fun selectVideoTrack(trackIndex: Int) {
-        val track = playbackState.value.videoTracks.getOrNull(trackIndex) ?: return
-        val groups = exoPlayer.currentTracks.groups
-        val groupIndex = track.index
-        val innerTrackIndex = track.id.toIntOrNull() ?: return
-        if (groupIndex in 0 until groups.size) {
-            val trackGroup = groups[groupIndex]
-            if (trackGroup.type == C.TRACK_TYPE_VIDEO && innerTrackIndex in 0 until trackGroup.length) {
-                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                    .buildUpon()
-                    .setOverrideForType(
-                        TrackSelectionOverride(
-                            trackGroup.mediaTrackGroup,
-                            innerTrackIndex,
-                        ),
-                    )
-                    .build()
-                if (!exoPlayer.isPlaying) exoPlayer.play()
+        if (trackIndex == -1) {
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                .build()
+        } else {
+            val track = playbackState.value.videoTracks.getOrNull(trackIndex) ?: return
+            val groups = exoPlayer.currentTracks.groups
+            val groupIndex = track.index
+            val innerTrackIndex = track.id.toIntOrNull() ?: return
+            if (groupIndex in 0 until groups.size) {
+                val trackGroup = groups[groupIndex]
+                if (trackGroup.type == C.TRACK_TYPE_VIDEO && innerTrackIndex in 0 until trackGroup.length) {
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                        .buildUpon()
+                        .setOverrideForType(
+                            TrackSelectionOverride(
+                                trackGroup.mediaTrackGroup,
+                                innerTrackIndex,
+                            ),
+                        )
+                        .build()
+                }
             }
         }
     }
@@ -212,20 +221,7 @@ class AndroidMoviePlayer(
 
     override fun setSubtitleStyle(style: SubtitleStyle) {
         getPlayerView()?.subtitleView?.let { sv ->
-            sv.setStyle(
-                CaptionStyleCompat(
-                    style.fontColorArgb,
-                    android.graphics.Color.argb(
-                        (style.bgOpacity * 255).toInt(), 0, 0, 0,
-                    ),
-                    android.graphics.Color.TRANSPARENT,
-                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                    style.fontColorArgb,
-                    null,
-                ),
-            )
-            sv.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, style.fontSizeSp.toFloat())
-            sv.invalidate()
+            applySubtitleStyleToView(sv, style)
         }
     }
 
@@ -298,11 +294,8 @@ actual fun VideoPlayer(
         act
     }
     DisposableEffect(forceLandscape) {
-        val originalOrientation = activity?.requestedOrientation
-            ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         if (forceLandscape) {
-            activity?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            applyLandscapeLock(context)
         }
 
         // Immersive Fullscreen Mode (only in forced landscape)
@@ -319,9 +312,9 @@ actual fun VideoPlayer(
         }
 
         onDispose {
-            if (forceLandscape) {
-                activity?.requestedOrientation = originalOrientation
-            }
+            // Orientation never restored here — PlayerScreen.kt handles the final
+            // restore via applyOrientationRestore() in its own DisposableEffect.
+            // This prevents the landscape→portrait→landscape flicker on source switch.
             if (window != null && controller != null) {
                 controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 controller.systemBarsBehavior = previousBehavior
@@ -353,12 +346,13 @@ actual fun VideoPlayer(
 
     val okHttpClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS) // faster failure for dead hosts
+            .readTimeout(30, TimeUnit.SECONDS) // proxy extractors need time for redirect chains
+            .writeTimeout(3, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
-            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .connectionPool(ConnectionPool(10, 10, TimeUnit.MINUTES)) // larger pool for proxy redirects
+            .protocols(listOf(okhttp3.Protocol.HTTP_2, okhttp3.Protocol.HTTP_1_1))
             .build()
     }
 
@@ -369,17 +363,17 @@ actual fun VideoPlayer(
 
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                // minBufferMs
-                50_000,
-                // maxBufferMs
-                120_000,
-                // bufferForPlaybackMs
-                2_500,
-                // bufferForPlaybackAfterRebufferMs
-                5_000,
+                // minBufferMs — minimum before playback considered "ready"
+                15_000,
+                // maxBufferMs — maximum to buffer ahead
+                60_000,
+                // bufferForPlaybackMs — initial buffer before starting
+                1_500,
+                // bufferForPlaybackAfterRebufferMs — after a stall
+                2_000,
             )
-            .setPrioritizeTimeOverSizeThresholds(false)
-            .setBackBuffer(30_000, false)
+            .setPrioritizeTimeOverSizeThresholds(true) // start sooner, buffer less
+            .setBackBuffer(15_000, false)
             .build()
 
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
@@ -439,6 +433,7 @@ actual fun VideoPlayer(
             // Reset track selection params on source switch to clear old overrides
             exoPlayer.trackSelectionParameters =
                 androidx.media3.common.TrackSelectionParameters.getDefaults(context)
+            // Build MediaItem with proxy headers applied to the request
             val mediaItem = if (drmLicenseUrl != null) {
                 val drmUuid = when (drmScheme?.lowercase()) {
                     "widevine" -> androidx.media3.common.C.WIDEVINE_UUID
@@ -454,20 +449,32 @@ actual fun VideoPlayer(
                     )
                     .build()
             } else {
-                MediaItem.fromUri(url)
+                androidx.media3.common.MediaItem.Builder()
+                    .setUri(url)
+                    .setCustomCacheKey(url)
+                    .build()
             }
             exoPlayer.setMediaItem(mediaItem)
-            // Preconnect: warm DNS + TCP + TLS before prepare()
+
+            // Preconnect with proxy headers — warm extractor, then warm the final CDN
             try {
                 withContext(Dispatchers.IO) {
                     val headRequest = okhttp3.Request.Builder()
-                        .url(url)
-                        .head()
+                        .url(url).head()
+                        .apply { headers.forEach { (k, v) -> addHeader(k, v) } }
                         .build()
-                    okHttpClient.newCall(headRequest).execute().close()
+                    val response = okHttpClient.newCall(headRequest).execute()
+                    val finalUrl = response.request.url.toString()
+                    response.close()
+                    // Pre-warm actual media CDN (post-redirect)
+                    if (finalUrl != url) {
+                        okHttpClient.newCall(
+                            okhttp3.Request.Builder().url(finalUrl).head().build(),
+                        ).execute().close()
+                    }
                 }
             } catch (_: Exception) {
-                // Best-effort preconnect — media will still load via normal prepare()
+                // Best-effort preconnect
             }
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
@@ -543,6 +550,7 @@ actual fun VideoPlayer(
                         playbackSpeed = player.playbackParameters.speed,
                         selectedAudioTrackIndex = if (result != null) result.selectedAudioTrackIndex else platformPlayer.playbackState.value.selectedAudioTrackIndex,
                         selectedSubtitleTrackIndex = if (result != null) result.selectedSubtitleTrackIndex else platformPlayer.playbackState.value.selectedSubtitleTrackIndex,
+                        selectedVideoTrackIndex = if (result != null) result.selectedVideoTrackIndex else platformPlayer.playbackState.value.selectedVideoTrackIndex,
                         audioTracks = if (result != null) result.audioTracks else platformPlayer.playbackState.value.audioTracks,
                         subtitleTracks = if (result != null) result.subtitleTracks else platformPlayer.playbackState.value.subtitleTracks,
                         videoTracks = if (result != null) result.videoTracks else platformPlayer.playbackState.value.videoTracks,
@@ -587,7 +595,7 @@ actual fun VideoPlayer(
                     ),
                 )
             }
-            delay(1000)
+            delay(1000.milliseconds)
         }
     }
 
@@ -620,20 +628,7 @@ actual fun VideoPlayer(
     // Apply subtitle styling
     LaunchedEffect(subtitleStyle, playerView) {
         playerView?.subtitleView?.let { sv ->
-            sv.setStyle(
-                CaptionStyleCompat(
-                    subtitleStyle.fontColorArgb,
-                    android.graphics.Color.argb(
-                        (subtitleStyle.bgOpacity * 255).toInt(), 0, 0, 0,
-                    ),
-                    android.graphics.Color.TRANSPARENT,
-                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                    subtitleStyle.fontColorArgb,
-                    null,
-                ),
-            )
-            sv.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subtitleStyle.fontSizeSp.toFloat())
-            sv.invalidate()
+            applySubtitleStyleToView(sv, subtitleStyle)
         }
     }
 
@@ -672,6 +667,20 @@ actual fun VideoPlayer(
         }
     }
 
+    // Safely manage ExoPlayer release lifecycle to prevent memory leaks
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            playerView?.player = null
+            playerView = null
+            try {
+                exoPlayer.release()
+            } catch (_: Exception) {
+                // best-effort release
+            }
+            playerReleased = true
+        }
+    }
+
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -691,11 +700,6 @@ actual fun VideoPlayer(
             // Release player AFTER PlayerView is detached — prevents crash when
             // PlayerView's onDetachedFromWindow tries to access the released player
             releasedView.player = null
-            try {
-                exoPlayer.release()
-            } catch (_: Exception) {
-                // ExoPlayer release is best-effort at this point
-            }
             playerReleased = true
         },
         modifier = modifier,
@@ -708,6 +712,7 @@ private data class TrackExtractionResult(
     val videoTracks: List<VideoTrack>,
     val selectedAudioTrackIndex: Int,
     val selectedSubtitleTrackIndex: Int,
+    val selectedVideoTrackIndex: Int,
     val videoWidth: Int,
     val videoHeight: Int,
     val videoCodec: String?,
@@ -730,6 +735,10 @@ private fun extractTracks(player: Player): TrackExtractionResult {
     val audioTracks = mutableListOf<AudioTrack>()
     val subtitleTracks = mutableListOf<SubtitleTrack>()
     val videoTracks = mutableListOf<VideoTrack>()
+
+    val trackSelectionParameters = player.trackSelectionParameters
+    val hasVideoOverride = trackSelectionParameters.overrides.values.any { it.type == C.TRACK_TYPE_VIDEO }
+    val videoOverride = trackSelectionParameters.overrides.values.firstOrNull { it.type == C.TRACK_TYPE_VIDEO }
     var videoWidth = 0
     var videoHeight = 0
     var videoCodec: String? = null
@@ -779,6 +788,11 @@ private fun extractTracks(player: Player): TrackExtractionResult {
                     ),
                 )
             } else if (type == C.TRACK_TYPE_VIDEO) {
+                val isTrackOverridden = if (hasVideoOverride) {
+                    videoOverride?.mediaTrackGroup == group.mediaTrackGroup && videoOverride?.trackIndices?.contains(i) == true
+                } else {
+                    false
+                }
                 videoTracks.add(
                     VideoTrack(
                         index = index,
@@ -788,7 +802,7 @@ private fun extractTracks(player: Player): TrackExtractionResult {
                         height = format.height,
                         codec = format.codecs,
                         bitrate = format.bitrate,
-                        isSelected = isSelected,
+                        isSelected = isTrackOverridden,
                     ),
                 )
                 if (isSelected) {
@@ -848,6 +862,7 @@ private fun extractTracks(player: Player): TrackExtractionResult {
 
     val selectedAudioTrackIndex = audioTracks.indexOfFirst { it.isSelected }
     val selectedSubtitleTrackIndex = subtitleTracks.indexOfFirst { it.isSelected }
+    val selectedVideoTrackIndex = if (!hasVideoOverride) -1 else videoTracks.indexOfFirst { it.isSelected }
 
     return TrackExtractionResult(
         audioTracks = audioTracks,
@@ -855,6 +870,7 @@ private fun extractTracks(player: Player): TrackExtractionResult {
         videoTracks = videoTracks,
         selectedAudioTrackIndex = selectedAudioTrackIndex,
         selectedSubtitleTrackIndex = selectedSubtitleTrackIndex,
+        selectedVideoTrackIndex = selectedVideoTrackIndex,
         videoWidth = videoWidth,
         videoHeight = videoHeight,
         videoCodec = videoCodec,
@@ -871,4 +887,69 @@ private fun extractTracks(player: Player): TrackExtractionResult {
         displayFps = displayFps,
         chapters = chapters,
     )
+}
+
+private fun applySubtitleStyleToView(
+    sv: SubtitleView,
+    subtitleStyle: SubtitleStyle,
+) {
+    // Force Canvas view type to support custom font typefaces (WebView drops custom typefaces)
+    sv.setViewType(SubtitleView.VIEW_TYPE_CANVAS)
+
+    // Explicitly bypass embedded font styles/sizes to enforce user custom subtitle selections
+    sv.setApplyEmbeddedStyles(false)
+    sv.setApplyEmbeddedFontSizes(false)
+
+    val typeface = when (subtitleStyle.fontFamily) {
+        "Serif" -> android.graphics.Typeface.SERIF
+        "Monospace" -> android.graphics.Typeface.MONOSPACE
+        "Cursive" -> android.graphics.Typeface.create("cursive", android.graphics.Typeface.NORMAL)
+        else -> android.graphics.Typeface.SANS_SERIF
+    }
+    val style = when {
+        subtitleStyle.isBold && subtitleStyle.isItalic -> android.graphics.Typeface.BOLD_ITALIC
+        subtitleStyle.isBold -> android.graphics.Typeface.BOLD
+        subtitleStyle.isItalic -> android.graphics.Typeface.ITALIC
+        else -> android.graphics.Typeface.NORMAL
+    }
+    val finalTypeface = android.graphics.Typeface.create(typeface, style)
+
+    val baseBgColor = subtitleStyle.bgColorArgb
+    val bgAlpha = (subtitleStyle.bgOpacity * 255).toInt().coerceIn(0, 255)
+    val bgColor = if (baseBgColor == 0) {
+        android.graphics.Color.argb(bgAlpha, 0, 0, 0)
+    } else {
+        android.graphics.Color.argb(
+            bgAlpha,
+            android.graphics.Color.red(baseBgColor),
+            android.graphics.Color.green(baseBgColor),
+            android.graphics.Color.blue(baseBgColor),
+        )
+    }
+
+    val edgeType = when (subtitleStyle.edgeStyle) {
+        "None" -> CaptionStyleCompat.EDGE_TYPE_NONE
+        "Outline" -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+        "Shadow" -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+        else -> CaptionStyleCompat.EDGE_TYPE_NONE
+    }
+
+    val edgeColor = when (subtitleStyle.edgeStyle) {
+        "Outline" -> subtitleStyle.outlineColorArgb
+        "Shadow" -> subtitleStyle.shadowColorArgb
+        else -> android.graphics.Color.TRANSPARENT
+    }
+
+    sv.setStyle(
+        CaptionStyleCompat(
+            subtitleStyle.fontColorArgb,
+            bgColor,
+            android.graphics.Color.TRANSPARENT,
+            edgeType,
+            edgeColor,
+            finalTypeface,
+        ),
+    )
+    sv.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subtitleStyle.fontSizeSp.toFloat())
+    sv.invalidate()
 }

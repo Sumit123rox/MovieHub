@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +35,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.moviehub.core.model.MediaPerson
 import com.moviehub.core.ui.components.shimmerEffect
 import com.moviehub.core.ui.theme.MovieHubDimens
@@ -44,9 +47,10 @@ fun DetailCastSection(
     cast: List<MediaPerson>,
     modifier: Modifier = Modifier,
     showHeader: Boolean = true,
+    isLoading: Boolean = false,
     onCastClick: ((MediaPerson) -> Unit)? = null,
 ) {
-    if (cast.isEmpty()) return
+    if (cast.isEmpty() && !isLoading) return
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -62,16 +66,28 @@ fun DetailCastSection(
             )
         }
 
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.lg),
-            horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
-        ) {
-            items(cast, key = { "${it.name}_${it.role}" }) { person ->
-                CastItem(
-                    person = person,
-                    onClick = onCastClick?.let { { it(person) } },
-                )
+        if (isLoading && cast.isEmpty()) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
+            ) {
+                items(5) {
+                    CastShimmerItem()
+                }
+            }
+        } else {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = MovieHubDimens.Spacing.lg),
+                horizontalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.lg),
+            ) {
+                items(cast, key = { "${it.name}_${it.role}" }) { person ->
+                    CastItem(
+                        person = person,
+                        onClick = onCastClick?.let { { it(person) } },
+                    )
+                }
             }
         }
     }
@@ -187,6 +203,45 @@ private fun CastItem(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CastShimmerItem(
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .width(MovieHubDimens.Avatar.md + MovieHubDimens.Spacing.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.sm),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(MovieHubDimens.Avatar.md)
+                .clip(CircleShape)
+                .shimmerEffect()
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MovieHubDimens.Spacing.xxs),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(MovieHubDimens.Cast.shimmerNameWidth)
+                    .height(MovieHubDimens.Cast.shimmerNameHeight)
+                    .clip(RoundedCornerShape(MovieHubDimens.Spacing.dp3))
+                    .shimmerEffect()
+            )
+            Box(
+                modifier = Modifier
+                    .width(MovieHubDimens.Cast.shimmerRoleWidth)
+                    .height(MovieHubDimens.Cast.shimmerRoleHeight)
+                    .clip(RoundedCornerShape(MovieHubDimens.Spacing.dp2))
+                    .shimmerEffect()
+            )
         }
     }
 }

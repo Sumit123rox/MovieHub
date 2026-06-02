@@ -1,22 +1,27 @@
 package com.moviehub.core.ui.components
 
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.moviehub.core.ui.theme.MovieHubDimens
 
 /**
- * MovieHub top app bar — matches Nuvio styling with elevated surface,
- * Inter Bold title at 20sp, and compact 24dp back icon.
+ * MovieHub unified top app bar — matches Nuvio large header styling globally
+ * with identical spacing, bold typography, and back icon size.
  *
  * Applied everywhere EXCEPT the HomeScreen.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MovieHubTopBar(
     title: String,
@@ -24,38 +29,48 @@ fun MovieHubTopBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Surface(
-        tonalElevation = MovieHubDimens.TopBar.elevationTonal,
-        shadowElevation = MovieHubDimens.TopBar.elevationShadow,
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.background,
     ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
-            },
-            navigationIcon = {
-                if (onBackClick != null) {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = androidx.compose.ui.Modifier.size(MovieHubDimens.TopBar.backIconSize),
-                        )
-                    }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(
+                    start = MovieHubDimens.Spacing.lg,
+                    end = MovieHubDimens.Spacing.lg,
+                    top = MovieHubDimens.Spacing.lg,
+                    bottom = MovieHubDimens.Spacing.sm
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBackClick != null) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.padding(end = MovieHubDimens.Spacing.sm)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(MovieHubDimens.Icon.md)
+                    )
                 }
-            },
-            actions = actions,
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                actionIconContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            ),
-        )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 32.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                actions()
+            }
+        }
     }
 }

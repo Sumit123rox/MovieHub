@@ -60,14 +60,28 @@ data class StreamItem(
     val playbackPriority: Int
         get() {
             val nameLc = name?.lowercase() ?: ""
+            val descLc = description?.lowercase() ?: ""
+            val urlLc = url?.lowercase() ?: ""
+
             val qualityScore = when {
-                nameLc.contains("4k") || nameLc.contains("2160") -> 100
-                nameLc.contains("1080") || nameLc.contains("fhd") -> 75
-                nameLc.contains("720") || nameLc.contains("hd") -> 50
-                nameLc.contains("480") || nameLc.contains("sd") -> 25
+                nameLc.contains("4k") || nameLc.contains("2160") -> 1000
+                nameLc.contains("1080") || nameLc.contains("fhd") -> 750
+                nameLc.contains("720") || nameLc.contains("hd") -> 500
+                nameLc.contains("480") || nameLc.contains("sd") -> 250
                 else -> 0
             }
-            return qualityScore + streamFormat.priority
+
+            // Give HLS (.m3u8) and DASH (.mpd) a significant boost to prioritize adaptive playback
+            val formatBoost = when (streamFormat) {
+                StreamFormat.HLS -> 2000
+                StreamFormat.DASH -> 1500
+                else -> 0
+            }
+
+            // Penalize non-webready or raw mp4 files slightly if we have alternatives
+            val penalty = if (behaviorHints.notWebReady) -50 else 0
+
+            return qualityScore + formatBoost + streamFormat.priority + penalty
         }
 }
 

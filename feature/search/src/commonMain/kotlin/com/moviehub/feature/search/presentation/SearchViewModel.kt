@@ -7,10 +7,11 @@ import com.moviehub.core.database.SearchHistoryDao
 import com.moviehub.core.database.SearchHistoryEntity
 import com.moviehub.core.utils.PerformanceMonitor
 import com.moviehub.feature.search.data.SearchRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
@@ -22,6 +23,8 @@ class SearchViewModel(
     private val _state = MutableStateFlow(SearchState())
     val state: StateFlow<SearchState> = _state.asStateFlow()
 
+    private var suggestionsJob: Job? = null
+
     init {
         loadRecentSearches()
     }
@@ -30,15 +33,54 @@ class SearchViewModel(
         when (action) {
             is SearchAction.QueryChanged -> {
                 _state.value = _state.value.copy(query = action.query)
+                triggerSuggestions(action.query)
             }
             is SearchAction.PerformSearch -> {
+                suggestionsJob?.cancel()
+                _state.value = _state.value.copy(suggestions = emptyList())
                 performSearch()
             }
             is SearchAction.ClearSearchHistory -> clearHistory()
             is SearchAction.RemoveSearch -> removeSearch(action.query)
             is SearchAction.SelectRecentSearch -> {
-                _state.value = _state.value.copy(query = action.query)
+                suggestionsJob?.cancel()
+                _state.value = _state.value.copy(
+                    query = action.query,
+                    suggestions = emptyList(),
+                )
                 performSearch()
+            }
+            is SearchAction.SelectSuggestion -> {
+                suggestionsJob?.cancel()
+                _state.value = _state.value.copy(
+                    query = action.query,
+                    suggestions = emptyList(),
+                )
+                performSearch()
+            }
+        }
+    }
+
+    private fun triggerSuggestions(query: String) {
+        suggestionsJob?.cancel()
+        if (query.trim().length < 2) {
+            _state.value = _state.value.copy(suggestions = emptyList())
+            return
+        }
+
+        suggestionsJob = viewModelScope.launch {
+            // Debounce for 300ms to avoid spamming the APIs as the user types
+            delay(300)
+            try {
+                val list = repository.getSearchSuggestions(query)
+                // Double-check the query hasn't changed under us
+                if (_state.value.query == query) {
+                    _state.value = _state.value.copy(suggestions = list)
+                }
+            } catch (_: Exception) {
+                if (_state.value.query == query) {
+                    _state.value = _state.value.copy(suggestions = emptyList())
+                }
             }
         }
     }

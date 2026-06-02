@@ -23,6 +23,10 @@ data class TmdbMovieDetails(
     @SerialName("belongs_to_collection") val belongsToCollection: TmdbCollectionRef? = null,
     @SerialName("imdb_id") val imdbId: String? = null,
     @SerialName("vote_average_count") val voteAverageCount: Int? = null,
+    val budget: Long? = null,
+    val revenue: Long? = null,
+    val popularity: Double? = null,
+    @SerialName("original_title") val originalTitle: String? = null,
 )
 
 @Serializable
@@ -50,6 +54,8 @@ data class TmdbTvDetails(
     @SerialName("last_episode_to_air") val lastEpisodeToAir: TmdbEpisodeRef? = null,
     @SerialName("next_episode_to_air") val nextEpisodeToAir: TmdbEpisodeRef? = null,
     @SerialName("in_production") val inProduction: Boolean? = null,
+    val popularity: Double? = null,
+    @SerialName("original_name") val originalName: String? = null,
 )
 
 @Serializable

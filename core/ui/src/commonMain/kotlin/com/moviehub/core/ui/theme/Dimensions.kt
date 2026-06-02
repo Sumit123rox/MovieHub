@@ -106,6 +106,14 @@ object MovieHubDimens {
         val lg = 56.dp
     }
 
+    /** Cast Section dimensions */
+    object Cast {
+        val shimmerNameWidth = 70.dp
+        val shimmerNameHeight = 14.dp
+        val shimmerRoleWidth = 50.dp
+        val shimmerRoleHeight = 10.dp
+    }
+
     /** Player-specific dimensions */
     object Player {
         val controlSize = 48.dp
@@ -205,13 +213,13 @@ object MovieHubDimens {
 
     /** Poster / Card */
     object Poster {
-        const val aspectRatio = 2f / 3f
-        val homeWidth = 150.dp
-        val homeHeight = 225.dp
-        val continueWatchingWidth = 160.dp
-        val continueWatchingHeight = 220.dp
-        val bottomSheetThumbnailWidth = 60.dp
-        val bottomSheetThumbnailHeight = 90.dp
+        const val aspectRatio = 0.72f
+        val homeWidth = 160.dp
+        val homeHeight = 220.dp
+        val continueWatchingWidth = 175.dp
+        val continueWatchingHeight = 215.dp
+        val bottomSheetThumbnailWidth = 64.dp
+        val bottomSheetThumbnailHeight = 88.dp
     }
 
     /** Font sizes (supplementing MaterialTheme typography) */
