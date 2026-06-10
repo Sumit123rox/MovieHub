@@ -50,6 +50,7 @@ import com.moviehub.feature.details.presentation.StreamsScreen
 import com.moviehub.feature.details.presentation.person.PersonDetailScreen
 import com.moviehub.feature.home.presentation.CatalogScreen
 import com.moviehub.feature.home.presentation.HomeScreen
+import com.moviehub.feature.home.presentation.HomeViewModel
 import com.moviehub.feature.player.presentation.PlayerScreen
 import com.moviehub.feature.profile.presentation.AppearanceScreen
 import com.moviehub.feature.profile.presentation.DownloadsScreen
@@ -71,7 +72,7 @@ fun RootNavGraph() {
     // No active profile → show the profile picker directly (never render HomeScreen first)
     if (activeProfile == null) {
         // Pre-warm HomeScreen data while user selects profile — instant content on login
-        val homeViewModel: com.moviehub.feature.home.presentation.HomeViewModel = koinViewModel()
+        val homeViewModel: HomeViewModel = koinViewModel()
         ProfileScreen(
             viewModel = koinViewModel(),
             onProfileSelected = {

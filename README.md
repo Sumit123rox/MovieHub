@@ -3,6 +3,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3.21-7F52FF.svg)](https://kotlinlang.org)
 [![Compose Multiplatform](https://img.shields.io/badge/Compose_Multiplatform-1.11.0-27C2A0.svg)](https://www.jetbrains.com/lp/compose-multiplatform/)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-6C63FF.svg)](#)
+[![CI](https://github.com/Sumit123rox/MovieHub/actions/workflows/ci.yml/badge.svg)](https://github.com/Sumit123rox/MovieHub/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A **Kotlin Multiplatform** media hub for the Stremio addon ecosystem — browse catalogs, discover metadata, and play streams from **your own addons**. No built-in content, no bundled scrapers. You choose the sources.
@@ -140,6 +141,8 @@ cd MovieHub
 ./gradlew :composeApp:iosSimulatorArm64MainKotlinNativeCompile
 open iosApp/iosApp.xcodeproj
 ```
+
+> CI runs automatically on push/PR to `main` — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ### First Run
 
